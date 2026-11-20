@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --theme-surface: #fff;
+      --theme-text: #1f2937;
+      --theme-muted: #4b5563;
+      --theme-accent: #475569;
+      --theme-button-text: #fff;
+      --theme-soft: #e5e7eb;
+    }
+    body {
+      margin: 0;
+      background: var(--theme-surface);
+      color: var(--theme-text);
+      font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    audio { display: block; width: 100%; margin: 0 0 12px; }
+    .actions { display: flex; gap: 8px; }
+    button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 12px;
+      padding: 0 16px;
+      background: var(--theme-accent);
+      color: var(--theme-button-text);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+    }
+    button:disabled { background: var(--theme-soft); color: var(--theme-muted); cursor: default; }
+    #previous { background: var(--theme-soft); color: var(--theme-text); }
+    #previous[hidden] { display: none; }
+    #next { flex: 1; }
+    #status { min-height: 22px; margin-top: 8px; color: var(--theme-muted); font-size: 13px; }
+    #progress {
+      height: 4px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: var(--theme-soft);
+    }
+    #progress-fill { width: 0; height: 100%; background: var(--theme-accent); }
+  </style>
+</head>
+<body>
+  <audio controls preload="metadata"></audio>
+  <div class="actions">
+    <button id="previous" type="button">이전 단계</button>
+    <button id="next" type="button">다음 단계</button>
+  </div>
+  <div id="status" role="status" aria-live="polite"></div>
+  <div id="progress" aria-hidden="true"><div id="progress-fill"></div></div>
+  <script>
+    const audio = document.querySelector("audio");
+    const previousButton = document.querySelector("#previous");
+    const nextButton = document.querySelector("#next");
+    const status = document.querySelector("#status");
+    const progressFill = document.querySelector("#progress-fill");
+    let args = null;
+    let currentStep = null;
+    let cookingTimer = null;
+    let transitionTimer = null;
+    let transitionStartedAt = 0;
+    let pending = false;
+
+    function send(action) {
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: {
+          action,
+          step_number: Number(args.step_number),
+          event_id: `${Date.now()}-${Math.random()}`
+        }
+      }, "*");
+    }
+
+    function clearCookingTimer() {
+      if (cookingTimer !== null) {
+        window.clearInterval(cookingTimer);
+        cookingTimer = null;
+      }
+    }
+
+    function startCookingTimer() {
+      if (!args || !args.auto_advance || !audio.ended || cookingTimer !== null) return;
+      const deadline = Date.now() + Number(args.cook_seconds) * 1000;
+      status.textContent = "음성 안내 종료 후 예상 시간에 자동 전환됩니다.";
+      cookingTimer = window.setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        const minutes = Math.floor(remaining / 60);
+        const seconds = String(remaining % 60).padStart(2, "0");
+        status.textContent = `예상 전환까지 ${minutes}:${seconds}`;
+        if (remaining === 0) {
+          clearCookingTimer();
+          send("next");
+        }
+      }, 250);
+    }
+
+    function beginTransition() {
+      if (pending) return;
+      pending = true;
+      clearCookingTimer();
+      nextButton.disabled = true;
+      status.textContent = "잠시 후 다음 단계로 넘어갑니다.";
+      transitionStartedAt = Date.now();
+      if ("vibrate" in navigator) navigator.vibrate(18);
+      transitionTimer = window.setInterval(() => {
+        const elapsed = Date.now() - transitionStartedAt;
+        progressFill.style.width = `${Math.min(100, elapsed / 15)}%`;
+        if (elapsed >= 1500) {
+          window.clearInterval(transitionTimer);
+          transitionTimer = null;
+          send("next");
+        }
+      }, 40);
+    }
+
+    function render(nextArgs) {
+      args = nextArgs;
+      Object.entries(args.colors).forEach(([name, value]) => {
+        document.documentElement.style.setProperty(`--theme-${name.replaceAll("_", "-")}`, value);
+      });
+      document.documentElement.style.colorScheme = args.colors.scheme;
+      const stepKey = `${args.step_number}:${args.audio_base64}`;
+      if (stepKey !== currentStep) {
+        currentStep = stepKey;
+        clearCookingTimer();
+        pending = false;
+        progressFill.style.width = "0";
+        audio.src = `data:audio/mpeg;base64,${args.audio_base64}`;
+        audio.load();
+        status.textContent = "";
+      } else if (!args.auto_advance) {
+        clearCookingTimer();
+      } else {
+        startCookingTimer();
+      }
+      previousButton.hidden = !args.can_go_back;
+      nextButton.textContent = Number(args.step_number) === 5 ? "요리 완료" : "다음 단계";
+    }
+
+    nextButton.addEventListener("click", beginTransition);
+    previousButton.addEventListener("click", () => {
+      clearCookingTimer();
+      send("previous");
+    });
+    audio.addEventListener("ended", () => {
+      if (args && args.auto_advance) startCookingTimer();
+      else status.textContent = "음성 안내가 끝났어요. 준비되면 다음 단계로 넘어가세요.";
+    });
+    audio.addEventListener("play", () => {
+      status.textContent = "";
+      clearCookingTimer();
+    });
+    window.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "streamlit:render") render(event.data.args);
+    });
+
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:componentReady",
+      apiVersion: 1
+    }, "*");
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setFrameHeight",
+      height: 146
+    }, "*");
+  </script>
+</body>
+</html>
