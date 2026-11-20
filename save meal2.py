@@ -4,6 +4,7 @@ import base64
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+import unicodedata
 from typing import Any
 
 import streamlit as st
@@ -81,10 +82,13 @@ DELIVERY_PRICES = {
 
 def calculate_savings(menu_name: str) -> dict[str, int]:
     cost = sum(
-        Decimal(str(usage)) * Decimal(str(UNIT_PRICES.get(ingredient, 0))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        (
+            Decimal(str(usage))
+            * Decimal(str(UNIT_PRICES.get(ingredient, 0)))
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         for ingredient, (usage, _unit) in RECIPE_COST_USAGE[menu_name].items()
     )
-    ingredient_cost = int(round(cost))
+    ingredient_cost = int(cost.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     delivery_price = DELIVERY_PRICES[menu_name]
     delivery_total = delivery_price + DELIVERY_FEE
     return {
@@ -300,14 +304,30 @@ def select_theme(name: str) -> None:
         st.session_state[theme_checkbox_key(theme_name)] = theme_name == selected
 
 
+def resolve_existing_path(path: Path) -> Path | None:
+    if path.exists():
+        return path
+    for form in ("NFC", "NFD"):
+        candidate = Path(unicodedata.normalize(form, str(path)))
+        if candidate.exists():
+            return candidate
+    return None
+
+
 @st.cache_data(show_spinner=False)
 def read_asset(path: str) -> bytes:
-    return Path(path).read_bytes()
+    resolved = resolve_existing_path(Path(path))
+    if resolved is None:
+        raise FileNotFoundError(f"Asset not found: {path}")
+    return resolved.read_bytes()
 
 
 @st.cache_data(show_spinner=False)
 def step_image_canvas(path: str) -> Image.Image:
-    with Image.open(path) as source:
+    resolved = resolve_existing_path(Path(path))
+    if resolved is None:
+        raise FileNotFoundError(f"Step image not found: {path}")
+    with Image.open(resolved) as source:
         image = source.convert("RGB")
     canvas_width = (image.height * 3 + 1) // 2
     canvas = Image.new("RGB", (canvas_width, image.height), "white")
@@ -316,15 +336,25 @@ def step_image_canvas(path: str) -> Image.Image:
 
 
 def asset_path(recipe: Recipe, kind: str, step: int | None = None) -> Path:
-    folder = APP_DIR / recipe.folder
+    folder = resolve_existing_path(APP_DIR / recipe.folder) or (APP_DIR / recipe.folder)
     if kind == "finished":
-        return folder / f"{recipe.folder}_0_완성이미지.png"
-    if kind == "infographic":
-        return folder / f"{recipe.folder}_0_인포그래픽.png"
-    if step is None:
-        raise ValueError(f"A step number is required for {kind} assets.")
-    suffix = "이미지.png" if kind == "image" else "voice.mp3"
-    return folder / f"{recipe.folder}_{step}단계_{suffix}"
+        target = folder / f"{recipe.folder}_0_완성이미지.png"
+    elif kind == "infographic":
+        target = folder / f"{recipe.folder}_0_인포그래픽.png"
+    else:
+        if step is None:
+            raise ValueError(f"A step number is required for {kind} assets.")
+        suffix = "이미지.png" if kind == "image" else "voice.mp3"
+        target = folder / f"{recipe.folder}_{step}단계_{suffix}"
+    return resolve_existing_path(target) or target
+
+
+def render_image_safe(path: Path, caption: str | None = None) -> None:
+    resolved = resolve_existing_path(path)
+    if resolved is not None:
+        st.image(str(resolved), caption=caption, width="stretch")
+    else:
+        st.warning(f"이미지 파일을 찾을 수 없어요: {path.name}")
 
 
 def go_to(phase: str) -> None:
@@ -357,12 +387,12 @@ def render_home() -> None:
     for index, recipe in enumerate(recipes):
         matching = len(set(selected_tags) & set(recipe.ingredient_tags))
         with columns[index % 2]:
-            st.image(str(asset_path(recipe, "finished")), use_column_width=True)
+            render_image_safe(asset_path(recipe, "finished"))
             st.markdown(f"### {recipe.title}")
             st.caption(f"1인분 · 약 {recipe.total_minutes}분")
             if selected_tags:
                 st.caption(f"선택 재료 {matching}개 포함")
-            if st.button("메뉴 자세히 보기", key=f"open-{recipe.folder}", use_container_width=True):
+            if st.button("메뉴 자세히 보기", key=f"open-{recipe.folder}", width="stretch"):
                 st.session_state.recipe_folder = recipe.folder
                 st.session_state.phase = "detail"
                 st.rerun()
@@ -375,7 +405,7 @@ def render_detail(recipe: Recipe) -> None:
 
     st.markdown(f'<h1 class="main-title">{recipe.title}</h1>', unsafe_allow_html=True)
     st.caption(f"1인분 · 총 소요 시간 약 {recipe.total_minutes}분")
-    st.image(str(asset_path(recipe, "finished")), use_column_width=True)
+    render_image_safe(asset_path(recipe, "finished"))
 
     st.subheader("오늘의 재료")
     st.markdown("\n".join(f"- {ingredient}" for ingredient in recipe.ingredients))
@@ -391,13 +421,13 @@ def render_detail(recipe: Recipe) -> None:
     )
 
     st.subheader("요리 순서 한눈에 보기")
-    st.image(str(asset_path(recipe, "infographic")), use_column_width=True)
+    render_image_safe(asset_path(recipe, "infographic"))
 
     with st.expander("참고 레시피 출처"):
         for source in recipe.sources:
             st.markdown(f"- {source}")
 
-    if st.button("요리 시작하기", type="primary", use_container_width=True):
+    if st.button("요리 시작하기", type="primary", width="stretch"):
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.session_state.auto_advance = False
@@ -440,14 +470,21 @@ def render_cooking(recipe: Recipe) -> None:
         )
 
     st.subheader(step.title)
-    st.image(
-        step_image_canvas(str(asset_path(recipe, "image", step_index + 1))),
-        use_column_width=True,
-    )
+    step_img_path = resolve_existing_path(asset_path(recipe, "image", step_index + 1))
+    if step_img_path is not None:
+        st.image(step_image_canvas(str(step_img_path)), width="stretch")
+    else:
+        st.warning(f"단계 이미지 파일을 찾을 수 없어요: {step_index + 1}단계")
     st.info(step.instruction)
 
-    audio_bytes = read_asset(str(asset_path(recipe, "voice", step_index + 1)))
-    audio_base64 = base64.b64encode(audio_bytes).decode("ascii")
+    audio_path = resolve_existing_path(asset_path(recipe, "voice", step_index + 1))
+    if audio_path is not None:
+        audio_bytes = read_asset(str(audio_path))
+        audio_base64 = base64.b64encode(audio_bytes).decode("ascii")
+    else:
+        st.warning(f"음성 파일을 찾을 수 없어요: {step_index + 1}단계")
+        audio_base64 = ""
+
     event: Any = CONTROLS_COMPONENT(
         audio_base64=audio_base64,
         auto_advance=st.session_state.auto_advance,
@@ -478,12 +515,12 @@ def render_cooking(recipe: Recipe) -> None:
 def render_done(recipe: Recipe) -> None:
     st.markdown('<div class="eyebrow">오늘의 요리 완료</div>', unsafe_allow_html=True)
     st.markdown(f'<h1 class="main-title">{recipe.title} 완성!</h1>', unsafe_allow_html=True)
-    st.image(str(asset_path(recipe, "finished")), use_column_width=True)
+    render_image_safe(asset_path(recipe, "finished"))
     st.success("수고하셨어요. 맛있게 드세요!")
-    if st.button("다른 메뉴 고르기", type="primary", use_container_width=True):
+    if st.button("다른 메뉴 고르기", type="primary", width="stretch"):
         st.session_state.phase = "home"
         st.rerun()
-    if st.button("이 메뉴 다시 요리하기", use_container_width=True):
+    if st.button("이 메뉴 다시 요리하기", width="stretch"):
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.rerun()
