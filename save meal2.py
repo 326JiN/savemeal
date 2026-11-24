@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -45,7 +44,6 @@ class Recipe:
 
 DELIVERY_FEE = 3_000
 
-# 원본 절감액 계산 표의 구매단위 단가(원)입니다.
 UNIT_PRICES: dict[str, float] = {
     "밥": 2133 / 210,
     "신김치": 29206 / 2600,
@@ -419,11 +417,11 @@ MICROWAVE_RECIPES: tuple[Recipe, ...] = (
         ingredients=("찬밥 1공기", "신김치 ½컵", "스팸 ⅓캔", "계란 1개", "식용유 1작은술", "참기름 1작은술"),
         ingredient_tags=("밥", "김치", "스팸", "계란"),
         steps=(
-            Step("재료 손질", 2, "전자레인지용 그릇 안에서 김치는 주방가위로 잘게 자르고, 스팸은 숟가락으로 한입 크기로 나눠 주세요. 캔 가장자리는 날카로우니 손을 대지 마세요.", ""),
-            Step("밥 데우기", 3, "밥에 물 1큰술과 식용유를 넣고 고루 풀어 주세요. 접시를 살짝 덮고 틈을 남긴 뒤 {heating_time} 가열해 주세요.", "", 3, 2),
-            Step("계란 익히기", 2, "계란을 깨서 밥과 충분히 섞어 주세요. 접시를 살짝 덮고 {heating_time} 가열한 뒤 저어 주세요. 액체 계란이 남으면 20초씩 더 가열해 완전히 익혀 주세요.", "", 2, 1),
-            Step("김치와 스팸 익히기", 3, "김치와 스팸을 넣어 섞고 접시를 살짝 덮어 {heating_time} 가열해 주세요. 중간에 한 번 저어 주세요.", "", 3, 2),
-            Step("마무리", 1, "참기름을 넣고 잘 섞어 주세요. 김치와 스팸이 뜨거워졌는지 확인하고, 차가운 부분이 있으면 20초씩 추가 가열해 주세요.", ""),
+            Step("재료 손질", 2, "전자레인지용 그릇 안에서 김치는 주방가위로 잘게 자르고, 스팸은 숟가락으로 한입 크기로 나눠 주세요. 캔 가장자리는 날카로우니 손을 대지 마세요.", "일 단계, 재료 손질. 김치는 가위로 잘게 자르고 스팸은 한입 크기로 나눠 주세요."),
+            Step("밥 데우기", 3, "밥에 물 1큰술과 식용유를 넣고 고루 풀어 주세요. 접시를 살짝 덮고 틈을 남긴 뒤 {heating_time} 가열해 주세요.", "이 단계, 밥 데우기. 물과 식용유를 넣고 고루 푼 뒤 접시를 살짝 덮고 가열해 주세요.", 3, 2),
+            Step("계란 익히기", 2, "계란을 깨서 밥과 충분히 섞어 주세요. 접시를 살짝 덮고 {heating_time} 가열한 뒤 저어 주세요. 액체 계란이 남으면 20초씩 더 가열해 완전히 익혀 주세요.", "삼 단계, 계란 익히기. 계란을 섞어 가열한 뒤 저어 주세요.", 2, 1),
+            Step("김치와 스팸 익히기", 3, "김치와 스팸을 넣어 섞고 접시를 살짝 덮어 {heating_time} 가열해 주세요. 중간에 한 번 저어 주세요.", "사 단계, 김치와 스팸 익히기. 김치와 스팸을 넣고 가열한 뒤 중간에 한 번 저어 주세요.", 3, 2),
+            Step("마무리", 1, "참기름을 넣고 잘 섞어 주세요. 김치와 스팸이 뜨거워졌는지 확인하고, 차가운 부분이 있으면 20초씩 추가 가열해 주세요.", "오 단계, 마무리. 참기름을 넣고 잘 섞으면 완성이에요."),
         ),
         sources=("세이브밀 조건 A 전자레인지 조리 안내",),
         variant="A",
@@ -435,11 +433,11 @@ MICROWAVE_RECIPES: tuple[Recipe, ...] = (
         ingredients=("소면 1인분", "신김치 ½컵", "고추장 1½숟가락", "설탕 ½숟가락", "식초 ½숟가락", "참기름 ½숟가락", "물 500ml"),
         ingredient_tags=("김치", "소면"),
         steps=(
-            Step("김치와 양념 준비", 2, "전자레인지용 큰 그릇 안에서 김치를 주방가위로 잘게 잘라 주세요. 고추장, 설탕, 식초, 참기름을 넣고 섞어 둡니다.", ""),
-            Step("면과 물 담기", 1, "소면을 그릇에 넣고 면이 잠기도록 물 500ml를 부어 주세요. 그릇은 절반 이상 비워 끓어 넘치지 않게 하고, 밀폐하지 말고 접시를 비스듬히 덮어 주세요.", ""),
-            Step("면 익히기", 7, "그릇이 뜨거우니 조심해 전자레인지에 넣고 {heating_time} 가열해 주세요. 끓어 넘치면 바로 멈추세요. 시간이 끝난 뒤 1분 두고 면이 익었는지 확인하고, 덜 익었으면 20초씩 추가해 주세요.", "", 7, 5),
-            Step("면 헹구기", 3, "오븐 장갑이나 마른 행주로 그릇을 꺼내세요. 접시를 비스듬히 대고 뜨거운 물을 조금씩 따라 버린 다음, 찬물을 받아 면을 헹구고 다시 조심히 따라 버립니다. 뜨거운 김과 물을 주의하세요.", ""),
-            Step("비비기", 2, "양념장에 물기를 뺀 면과 김치를 넣고 고루 비벼 주세요. 양념이 뭉치면 물을 1숟가락씩 더해 풀어 주세요.", ""),
+            Step("김치와 양념 준비", 2, "전자레인지용 큰 그릇 안에서 김치를 주방가위로 잘게 잘라 주세요. 고추장, 설탕, 식초, 참기름을 넣고 섞어 둡니다.", "일 단계, 김치와 양념 준비. 김치를 잘게 자르고 양념을 섞어 주세요."),
+            Step("면과 물 담기", 1, "소면을 그릇에 넣고 면이 잠기도록 물 500ml를 부어 주세요. 그릇은 절반 이상 비워 끓어 넘치지 않게 하고, 밀폐하지 말고 접시를 비스듬히 덮어 주세요.", "이 단계, 면과 물 담기. 소면과 물을 넣고 접시를 비스듬히 덮어 주세요."),
+            Step("면 익히기", 7, "그릇이 뜨거우니 조심해 전자레인지에 넣고 {heating_time} 가열해 주세요. 끓어 넘치면 바로 멈추세요. 시간이 끝난 뒤 1분 두고 면이 익었는지 확인하고, 덜 익었으면 20초씩 추가해 주세요.", "삼 단계, 면 익히기. 전자레인지에 넣고 가열해 주세요.", 7, 5),
+            Step("면 헹구기", 3, "오븐 장갑이나 마른 행주로 그릇을 꺼내세요. 접시를 비스듬히 대고 뜨거운 물을 조금씩 따라 버린 다음, 찬물을 받아 면을 헹구고 다시 조심히 따라 버립니다. 뜨거운 김과 물을 주의하세요.", "사 단계, 면 헹구기. 뜨거운 물을 조심히 따라 버리고 찬물로 헹궈 주세요."),
+            Step("비비기", 2, "양념장에 물기를 뺀 면과 김치를 넣고 고루 비벼 주세요. 양념이 뭉치면 물을 1숟가락씩 더해 풀어 주세요.", "오 단계, 비비기. 양념장에 면과 김치를 넣고 고루 비비면 완성이에요."),
         ),
         sources=("세이브밀 조건 A 전자레인지 조리 안내",),
         variant="A",
@@ -451,11 +449,11 @@ MICROWAVE_RECIPES: tuple[Recipe, ...] = (
         ingredients=("밥 1공기", "참치캔 1개", "마요네즈 2숟가락", "김가루 2숟가락"),
         ingredient_tags=("밥", "참치"),
         steps=(
-            Step("참치 기름 빼기", 1, "캔 가장자리를 조심해 참치캔을 열고, 숟가락으로 참치를 눌러 기름을 따라 버려 주세요. 캔 뚜껑은 바로 치워 주세요.", ""),
-            Step("밥 데우기", 2, "밥에 물 1큰술을 뿌리고 접시를 살짝 덮어 {heating_time} 가열해 주세요. 밥이 고루 뜨거워지도록 중간에 한 번 저어 주세요.", "", 2, 1),
-            Step("참치마요 만들기", 2, "참치와 마요네즈를 그릇에 넣고 숟가락으로 고루 섞어 주세요.", ""),
-            Step("밥에 올리기", 1, "따뜻한 밥을 그릇에 고르게 펴 주세요.", ""),
-            Step("마무리", 1, "밥 위에 참치마요와 김가루를 올려 주세요. 참치가 차가우면 20초씩 짧게 더 데워 주세요.", ""),
+            Step("참치 기름 빼기", 1, "캔 가장자리를 조심해 참치캔을 열고, 숟가락으로 참치를 눌러 기름을 따라 버려 주세요. 캔 뚜껑은 바로 치워 주세요.", "일 단계, 참치 기름 빼기. 참치캔 기름을 눌러 따라 버려 주세요."),
+            Step("밥 데우기", 2, "밥에 물 1큰술을 뿌리고 접시를 살짝 덮어 {heating_time} 가열해 주세요. 밥이 고루 뜨거워지도록 중간에 한 번 저어 주세요.", "이 단계, 밥 데우기. 물을 뿌리고 접시를 살짝 덮어 가열해 주세요.", 2, 1),
+            Step("참치마요 만들기", 2, "참치와 마요네즈를 그릇에 넣고 숟가락으로 고루 섞어 주세요.", "삼 단계, 참치마요 만들기. 참치와 마요네즈를 고루 섞어 주세요."),
+            Step("밥에 올리기", 1, "따뜻한 밥을 그릇에 고르게 펴 주세요.", "사 단계, 밥에 올리기. 따뜻한 밥을 그릇에 고르게 펴 주세요."),
+            Step("마무리", 1, "밥 위에 참치마요와 김가루를 올려 주세요. 참치가 차가우면 20초씩 짧게 더 데워 주세요.", "오 단계, 마무리. 참치마요와 김가루를 올리면 완성이에요."),
         ),
         sources=("세이브밀 조건 A 전자레인지 조리 안내",),
         variant="A",
@@ -631,40 +629,40 @@ def _find_file_flexible(
 
 
 def asset_path(recipe: Recipe, kind: str, step: int | None = None) -> Path:
-    folder = _resolve_folder(APP_DIR, recipe.folder)
-    if recipe.variant == "A":
-        folder = _resolve_folder(folder, "A안_전자레인지")
-        if kind == "finished":
-            stems = [f"{recipe.folder}_A_0_완성이미지", f"{recipe.folder}_0_완성이미지"]
-            found = _find_file_flexible(folder, stems)
-            return found if found else folder / f"{recipe.folder}_A_0_완성이미지.png"
-        if kind == "infographic":
-            stems = [f"{recipe.folder}_A_0_인포그래픽", f"{recipe.folder}_0_인포그래픽"]
-            found = _find_file_flexible(folder, stems)
-            return found if found else folder / f"{recipe.folder}_A_0_인포그래픽.png"
-        if step is None:
-            raise ValueError(f"A step number is required for {kind} assets.")
-        if kind == "image":
-            stems = [f"{recipe.folder}_A_{step}단계_이미지", f"{recipe.folder}_{step}단계_이미지"]
-            found = _find_file_flexible(folder, stems)
-            return found if found else folder / f"{recipe.folder}_A_{step}단계_이미지.png"
-        raise ValueError(f"No {kind} asset is available for the microwave recipe.")
+    base_folder = _resolve_folder(APP_DIR, recipe.folder)
+    if step is None and kind in {"image", "voice"}:
+        raise ValueError(f"A step number is required for {kind} assets.")
+
+    if kind == "voice":
+        candidates = [
+            _resolve_folder(base_folder, "A안_전자레인지") if recipe.variant == "A" else base_folder,
+            base_folder,
+        ]
+        stems = (
+            [f"{recipe.folder}_A_{step}단계_voice", f"{recipe.folder}_{step}단계_voice"]
+            if recipe.variant == "A"
+            else [f"{recipe.folder}_{step}단계_voice"]
+        )
+        for folder in candidates:
+            found_audio = _find_file_flexible(folder, stems, extensions=(".mp3", ".wav", ".m4a"))
+            if found_audio:
+                return found_audio
+        return candidates[0] / f"{stems[0]}.mp3"
+
+    folder = _resolve_folder(base_folder, "A안_전자레인지") if recipe.variant == "A" else base_folder
+    prefix = f"{recipe.folder}_A_" if recipe.variant == "A" else f"{recipe.folder}_"
 
     if kind == "finished":
-        found = _find_file_flexible(folder, [f"{recipe.folder}_0_완성이미지"])
-        return found if found else folder / f"{recipe.folder}_0_완성이미지.png"
-    if kind == "infographic":
-        found = _find_file_flexible(folder, [f"{recipe.folder}_0_인포그래픽"])
-        return found if found else folder / f"{recipe.folder}_0_인포그래픽.png"
-    if step is None:
-        raise ValueError(f"A step number is required for {kind} assets.")
-    if kind == "image":
-        found = _find_file_flexible(folder, [f"{recipe.folder}_{step}단계_이미지"])
-        return found if found else folder / f"{recipe.folder}_{step}단계_이미지.png"
-    found_audio = _find_file_flexible(
-        folder, [f"{recipe.folder}_{step}단계_voice"], extensions=(".mp3", ".wav", ".m4a")
-    )
-    return found_audio if found_audio else folder / f"{recipe.folder}_{step}단계_voice.mp3"
+        stems = [f"{prefix}0_완성이미지", f"{recipe.folder}_0_완성이미지"]
+    elif kind == "infographic":
+        stems = [f"{prefix}0_인포그래픽", f"{recipe.folder}_0_인포그래픽"]
+    elif kind == "image":
+        stems = [f"{prefix}{step}단계_이미지", f"{recipe.folder}_{step}단계_이미지"]
+    else:
+        raise ValueError(f"Unsupported asset kind: {kind}")
+
+    found = _find_file_flexible(folder, stems)
+    return found if found else folder / f"{stems[0]}.png"
 
 
 def recipes_for_profile() -> tuple[Recipe, ...]:
@@ -810,32 +808,40 @@ def advance_step(recipe: Recipe, step_index: int) -> None:
     st.session_state.step_index = step_index + 1
 
 
+def format_step_time_label(recipe: Recipe, step: Step) -> str:
+    if recipe.variant == "A" and step.microwave_minutes_700w is not None:
+        minutes = selected_microwave_minutes(step)
+        if minutes is not None:
+            return f"예상 약 {step.minutes}분 · 전자레인지 {st.session_state.microwave_wattage} 약 {minutes}분"
+        return f"예상 약 {step.minutes}분 · 출력 모름(1분부터 확인)"
+    return f"예상 약 {step.minutes}분"
+
+
 def render_cooking(recipe: Recipe) -> None:
     step_index = min(max(st.session_state.step_index, 0), len(recipe.steps) - 1)
     st.session_state.step_index = step_index
     step = recipe.steps[step_index]
 
     st.markdown(f'<h1 class="main-title">{recipe.title}</h1>', unsafe_allow_html=True)
-    st.caption(f"STEP {step_index + 1} / {len(recipe.steps)}")
+    st.caption(f"STEP {step_index + 1} / {len(recipe.steps)} · 단계 번호를 눌러 이동할 수 있어요")
 
     progress_columns = st.columns(len(recipe.steps))
     for index, column in enumerate(progress_columns):
         state = "complete" if index < step_index else "current" if index == step_index else "upcoming"
+        marker_prefix = "✓ " if state == "complete" else ""
         with column:
-            st.markdown(f'<div class="step-marker {state}">{index + 1}</div>', unsafe_allow_html=True)
+            if st.button(
+                f"{marker_prefix}{index + 1}",
+                key=f"step-jump-{recipe.folder}-{recipe.variant}-{index}",
+                width="stretch",
+                type="primary" if state == "current" else "secondary",
+            ):
+                st.session_state.step_index = index
+                st.rerun()
 
-    badge, setting = st.columns([1, 2])
+    badge, setting = st.columns([1.4, 1])
     with badge:
-        if recipe.variant == "A" and step.microwave_minutes_700w is not None:
-            minutes = selected_microwave_minutes(step)
-            time_label = (
-                f"전자레인지 {st.session_state.microwave_wattage} · 약 {minutes}분"
-                if minutes is not None
-                else "출력 모름 · 1분부터 짧게 확인"
-            )
-        else:
-            time_label = f"예상 약 {step.minutes}분"
-        st.markdown(f'<div class="time-badge">⏱ {time_label}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="time-badge">⏱ {format_step_time_label(recipe, step)}</div>', unsafe_allow_html=True)
 
     with setting:
         st.checkbox(
@@ -851,14 +857,19 @@ def render_cooking(recipe: Recipe) -> None:
     )
     st.info(cooking_instruction(step))
 
-    if recipe.variant != "A":
-        audio_path = asset_path(recipe, "voice", step_index + 1)
-        audio_bytes = read_asset(str(audio_path))
-        if audio_bytes:
-            mime_type = "audio/wav" if audio_path.suffix.lower() == ".wav" else "audio/mp4" if audio_path.suffix.lower() == ".m4a" else "audio/mp3"
-            st.audio(audio_bytes, format=mime_type)
-        else:
-            st.caption(f"음성 안내 파일이 없습니다. ({audio_path.name})")
+    audio_path = asset_path(recipe, "voice", step_index + 1)
+    audio_bytes = read_asset(str(audio_path))
+    if audio_bytes:
+        mime_type = (
+            "audio/wav"
+            if audio_path.suffix.lower() == ".wav"
+            else "audio/mp4"
+            if audio_path.suffix.lower() == ".m4a"
+            else "audio/mp3"
+        )
+        st.audio(audio_bytes, format=mime_type)
+    else:
+        st.caption(f"음성 안내 파일이 없습니다. ({audio_path.name})")
 
     col_prev, col_next = st.columns(2)
     with col_prev:
@@ -942,10 +953,7 @@ def main() -> None:
     .stApp [data-testid="stCaptionContainer"] p {{ color: {palette["muted"]} !important; }}
     .main-title, .eyebrow, a {{ color: {palette["accent"]} !important; }}
     .sub-title {{ color: {palette["muted"]}; }}
-    .time-badge {{ background: {palette["soft"]}; color: {palette["text"]}; }}
-    .step-marker {{ background: {palette["soft"]}; color: {palette["text"]}; }}
-    .step-marker.current {{ background: {palette["accent"]}; color: {palette["button_text"]}; }}
-    .step-marker.complete {{ background: {palette["complete"]}; color: {palette["text"]}; }}
+    .time-badge {{ background: {palette["soft"]}; color: {palette["text"]} !important; }}
     .stAlert {{
         background: {palette["surface"]} !important;
         color: {palette["text"]} !important;
@@ -970,15 +978,20 @@ def main() -> None:
     [data-baseweb="select"] input::placeholder {{ color: {palette["muted"]} !important; }}
     [data-baseweb="menu"] {{ background: {palette["surface"]}; }}
     [data-baseweb="menu"] * {{ color: {palette["text"]} !important; }}
-    div.stButton > button {{
+    div.stButton > button[kind="primary"] {{
         background: {palette["accent"]};
         color: {palette["button_text"]};
         border-color: {palette["border"]};
     }}
-    div.stButton > button:hover {{
+    div.stButton > button[kind="primary"]:hover {{
         background: {palette["accent_hover"]};
         color: {palette["button_text"]};
         border-color: {palette["accent_hover"]};
+    }}
+    div.stButton > button[kind="secondary"] {{
+        background: {palette["soft"]};
+        color: {palette["text"]};
+        border-color: {palette["border"]};
     }}
     div[data-testid="stPopover"] {{ width: fit-content; margin-left: auto; }}
     div[data-testid="stPopover"] > div > button {{
@@ -1002,7 +1015,6 @@ def main() -> None:
         .sub-title {{ margin: .25rem 0 1.2rem; }}
         .eyebrow {{ font-size: .85rem; font-weight: 700; }}
         .time-badge {{ display: inline-block; border-radius: 999px; padding: .45rem .8rem; font-weight: 700; }}
-        .step-marker {{ text-align: center; padding: .5rem; border-radius: 999px; font-weight: 700; }}
         div.stButton > button {{ border-radius: 12px; min-height: 2.5rem; font-weight: 700; }}
         div[data-testid="stImage"] img {{ border-radius: 16px; }}
         {theme_css}
