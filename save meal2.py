@@ -4,7 +4,6 @@ import base64
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-import unicodedata
 from typing import Any
 
 import streamlit as st
@@ -25,6 +24,8 @@ class Step:
     minutes: int
     instruction: str
     voice: str
+    microwave_minutes_700w: int | None = None
+    microwave_minutes_1000w: int | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class Recipe:
     ingredient_tags: tuple[str, ...]
     steps: tuple[Step, ...]
     sources: tuple[str, ...]
+    variant: str = "B"
 
 
 DELIVERY_FEE = 3_000
@@ -82,13 +84,10 @@ DELIVERY_PRICES = {
 
 def calculate_savings(menu_name: str) -> dict[str, int]:
     cost = sum(
-        (
-            Decimal(str(usage))
-            * Decimal(str(UNIT_PRICES.get(ingredient, 0)))
-        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        Decimal(str(usage)) * Decimal(str(UNIT_PRICES.get(ingredient, 0))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         for ingredient, (usage, _unit) in RECIPE_COST_USAGE[menu_name].items()
     )
-    ingredient_cost = int(cost.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    ingredient_cost = int(round(cost))
     delivery_price = DELIVERY_PRICES[menu_name]
     delivery_total = delivery_price + DELIVERY_FEE
     return {
@@ -237,6 +236,57 @@ RECIPES = (
     ),
 )
 
+MICROWAVE_RECIPES = (
+    Recipe(
+        folder="김치스팸볶음밥",
+        title="김치스팸볶음밥",
+        total_minutes=14,
+        ingredients=("찬밥 1공기", "신김치 ½컵", "스팸 ⅓캔", "계란 1개", "식용유 1작은술", "참기름 1작은술"),
+        ingredient_tags=("밥", "김치", "스팸", "계란"),
+        steps=(
+            Step("재료 손질", 2, "전자레인지용 그릇 안에서 김치는 주방가위로 잘게 자르고, 스팸은 숟가락으로 한입 크기로 나눠 주세요. 캔 가장자리는 날카로우니 손을 대지 마세요.", ""),
+            Step("밥 데우기", 3, "밥에 물 1큰술과 식용유를 넣고 고루 풀어 주세요. 접시를 살짝 덮고 틈을 남긴 뒤 {heating_time} 가열해 주세요.", "", 3, 2),
+            Step("계란 익히기", 2, "계란을 깨서 밥과 충분히 섞어 주세요. 접시를 살짝 덮고 {heating_time} 가열한 뒤 저어 주세요. 액체 계란이 남으면 20초씩 더 가열해 완전히 익혀 주세요.", "", 2, 1),
+            Step("김치와 스팸 익히기", 3, "김치와 스팸을 넣어 섞고 접시를 살짝 덮어 {heating_time} 가열해 주세요. 중간에 한 번 저어 주세요.", "", 3, 2),
+            Step("마무리", 1, "참기름을 넣고 잘 섞어 주세요. 김치와 스팸이 뜨거워졌는지 확인하고, 차가운 부분이 있으면 20초씩 추가 가열해 주세요.", ""),
+        ),
+        sources=("세이브밀 조건 A 전자레인지 조리 안내",),
+        variant="A",
+    ),
+    Recipe(
+        folder="비빔국수",
+        title="비빔국수",
+        total_minutes=15,
+        ingredients=("소면 1인분", "신김치 ½컵", "고추장 1½숟가락", "설탕 ½숟가락", "식초 ½숟가락", "참기름 ½숟가락", "물 500ml"),
+        ingredient_tags=("김치", "소면"),
+        steps=(
+            Step("김치와 양념 준비", 2, "전자레인지용 큰 그릇 안에서 김치를 주방가위로 잘게 잘라 주세요. 고추장, 설탕, 식초, 참기름을 넣고 섞어 둡니다.", ""),
+            Step("면과 물 담기", 1, "소면을 그릇에 넣고 면이 잠기도록 물 500ml를 부어 주세요. 그릇은 절반 이상 비워 끓어 넘치지 않게 하고, 밀폐하지 말고 접시를 비스듬히 덮어 주세요.", ""),
+            Step("면 익히기", 7, "그릇이 뜨거우니 조심해 전자레인지에 넣고 {heating_time} 가열해 주세요. 끓어 넘치면 바로 멈추세요. 시간이 끝난 뒤 1분 두고 면이 익었는지 확인하고, 덜 익었으면 20초씩 추가해 주세요.", "", 7, 5),
+            Step("면 헹구기", 3, "오븐 장갑이나 마른 행주로 그릇을 꺼내세요. 접시를 비스듬히 대고 뜨거운 물을 조금씩 따라 버린 다음, 찬물을 받아 면을 헹구고 다시 조심히 따라 버립니다. 뜨거운 김과 물을 주의하세요.", ""),
+            Step("비비기", 2, "양념장에 물기를 뺀 면과 김치를 넣고 고루 비벼 주세요. 양념이 뭉치면 물을 1숟가락씩 더해 풀어 주세요.", ""),
+        ),
+        sources=("세이브밀 조건 A 전자레인지 조리 안내",),
+        variant="A",
+    ),
+    Recipe(
+        folder="참치마요덮밥",
+        title="참치마요덮밥",
+        total_minutes=8,
+        ingredients=("밥 1공기", "참치캔 1개", "마요네즈 2숟가락", "김가루 2숟가락"),
+        ingredient_tags=("밥", "참치"),
+        steps=(
+            Step("참치 기름 빼기", 1, "캔 가장자리를 조심해 참치캔을 열고, 숟가락으로 참치를 눌러 기름을 따라 버려 주세요. 캔 뚜껑은 바로 치워 주세요.", ""),
+            Step("밥 데우기", 2, "밥에 물 1큰술을 뿌리고 접시를 살짝 덮어 {heating_time} 가열해 주세요. 밥이 고루 뜨거워지도록 중간에 한 번 저어 주세요.", "", 2, 1),
+            Step("참치마요 만들기", 2, "참치와 마요네즈를 그릇에 넣고 숟가락으로 고루 섞어 주세요.", ""),
+            Step("밥에 올리기", 1, "따뜻한 밥을 그릇에 고르게 펴 주세요.", ""),
+            Step("마무리", 1, "밥 위에 참치마요와 김가루를 올려 주세요. 참치가 차가우면 20초씩 짧게 더 데워 주세요.", ""),
+        ),
+        sources=("세이브밀 조건 A 전자레인지 조리 안내",),
+        variant="A",
+    ),
+)
+
 THEME_PALETTES = {
     "Default": {
         "background": "#F4F5F7",
@@ -304,30 +354,22 @@ def select_theme(name: str) -> None:
         st.session_state[theme_checkbox_key(theme_name)] = theme_name == selected
 
 
-def resolve_existing_path(path: Path) -> Path | None:
-    if path.exists():
-        return path
-    for form in ("NFC", "NFD"):
-        candidate = Path(unicodedata.normalize(form, str(path)))
-        if candidate.exists():
-            return candidate
-    return None
+def select_kitchen_profile() -> None:
+    st.session_state.kitchen_profile = st.session_state.kitchen_profile_selector
+
+
+def select_microwave_wattage() -> None:
+    st.session_state.microwave_wattage = st.session_state.microwave_wattage_selector
 
 
 @st.cache_data(show_spinner=False)
 def read_asset(path: str) -> bytes:
-    resolved = resolve_existing_path(Path(path))
-    if resolved is None:
-        raise FileNotFoundError(f"Asset not found: {path}")
-    return resolved.read_bytes()
+    return Path(path).read_bytes()
 
 
 @st.cache_data(show_spinner=False)
 def step_image_canvas(path: str) -> Image.Image:
-    resolved = resolve_existing_path(Path(path))
-    if resolved is None:
-        raise FileNotFoundError(f"Step image not found: {path}")
-    with Image.open(resolved) as source:
+    with Image.open(path) as source:
         image = source.convert("RGB")
     canvas_width = (image.height * 3 + 1) // 2
     canvas = Image.new("RGB", (canvas_width, image.height), "white")
@@ -336,25 +378,46 @@ def step_image_canvas(path: str) -> Image.Image:
 
 
 def asset_path(recipe: Recipe, kind: str, step: int | None = None) -> Path:
-    folder = resolve_existing_path(APP_DIR / recipe.folder) or (APP_DIR / recipe.folder)
-    if kind == "finished":
-        target = folder / f"{recipe.folder}_0_완성이미지.png"
-    elif kind == "infographic":
-        target = folder / f"{recipe.folder}_0_인포그래픽.png"
-    else:
+    folder = APP_DIR / recipe.folder
+    if recipe.variant == "A":
+        folder = folder / "A안_전자레인지"
+        if kind == "finished":
+            return folder / f"{recipe.folder}_A_0_완성이미지.png"
+        if kind == "infographic":
+            return folder / f"{recipe.folder}_A_0_인포그래픽.png"
         if step is None:
             raise ValueError(f"A step number is required for {kind} assets.")
-        suffix = "이미지.png" if kind == "image" else "voice.mp3"
-        target = folder / f"{recipe.folder}_{step}단계_{suffix}"
-    return resolve_existing_path(target) or target
+        if kind == "image":
+            return folder / f"{recipe.folder}_A_{step}단계_이미지.png"
+        raise ValueError(f"No {kind} asset is available for the microwave recipe.")
+    if kind == "finished":
+        return folder / f"{recipe.folder}_0_완성이미지.png"
+    if kind == "infographic":
+        return folder / f"{recipe.folder}_0_인포그래픽.png"
+    if step is None:
+        raise ValueError(f"A step number is required for {kind} assets.")
+    suffix = "이미지.png" if kind == "image" else "voice.mp3"
+    return folder / f"{recipe.folder}_{step}단계_{suffix}"
 
 
-def render_image_safe(path: Path, caption: str | None = None) -> None:
-    resolved = resolve_existing_path(path)
-    if resolved is not None:
-        st.image(str(resolved), caption=caption, width="stretch")
-    else:
-        st.warning(f"이미지 파일을 찾을 수 없어요: {path.name}")
+def recipes_for_profile() -> tuple[Recipe, ...]:
+    return MICROWAVE_RECIPES if st.session_state.kitchen_profile == "A" else RECIPES
+
+
+def selected_microwave_minutes(step: Step) -> int | None:
+    if st.session_state.microwave_wattage == "700W":
+        return step.microwave_minutes_700w
+    if st.session_state.microwave_wattage == "1000W":
+        return step.microwave_minutes_1000w
+    return None
+
+
+def cooking_instruction(step: Step) -> str:
+    if step.microwave_minutes_700w is None:
+        return step.instruction
+    minutes = selected_microwave_minutes(step)
+    heating_time = f"약 {minutes}분" if minutes is not None else "1분부터 짧게"
+    return step.instruction.replace("{heating_time}", heating_time)
 
 
 def go_to(phase: str) -> None:
@@ -362,13 +425,40 @@ def go_to(phase: str) -> None:
 
 
 def render_home() -> None:
-    st.markdown('<div class="eyebrow">오늘의 한 끼</div>', unsafe_allow_html=True)
+    st.markdown('<div class="eyebrow">맞춤 레시피 추천</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="main-title">세이브밀</h1>', unsafe_allow_html=True)
     st.markdown(
         '<p class="sub-title">집에 있는 재료로 만드는 쉬운 한 끼</p>',
         unsafe_allow_html=True,
     )
-    all_tags = sorted({tag for recipe in RECIPES for tag in recipe.ingredient_tags})
+    st.subheader("주방 환경을 선택해 주세요")
+    st.radio(
+        "조리 환경",
+        options=("A", "B"),
+        format_func=lambda value: (
+            "자취생 초간단 열원 · 전자레인지 중심"
+            if value == "A"
+            else "일반 가정 · 가스레인지/인덕션 다구 열원"
+        ),
+        horizontal=False,
+        key="kitchen_profile_selector",
+        on_change=select_kitchen_profile,
+        label_visibility="collapsed",
+    )
+    if st.session_state.kitchen_profile == "A":
+        st.selectbox(
+            "전자레인지 출력",
+            options=("700W", "1000W", "모름"),
+            key="microwave_wattage_selector",
+            on_change=select_microwave_wattage,
+            help="출력을 모르면 기기 뒷면이나 문 안쪽의 표시를 확인해 주세요. 모를 때는 1분부터 짧게 가열하고 20초씩 추가하며 상태를 확인합니다.",
+        )
+        st.caption("칼·도마·가스레인지 없이 주방가위와 전자레인지용 그릇으로 만드는 메뉴를 추천해요.")
+    else:
+        st.info("칼·도마·냄비·프라이팬을 사용하는 단계별 화력 조절 레시피를 보여드려요.")
+
+    recipes_for_kitchen = recipes_for_profile()
+    all_tags = sorted({tag for recipe in recipes_for_kitchen for tag in recipe.ingredient_tags})
     selected_tags = st.multiselect(
         "가지고 있는 재료를 선택해 주세요",
         all_tags,
@@ -377,7 +467,7 @@ def render_home() -> None:
     st.caption("재료가 많이 맞는 메뉴부터 추천해요. 재료를 고르지 않으면 전체 메뉴를 보여드려요.")
 
     recipes = sorted(
-        RECIPES,
+        recipes_for_kitchen,
         key=lambda item: (
             -len(set(selected_tags) & set(item.ingredient_tags)),
             item.title,
@@ -387,12 +477,12 @@ def render_home() -> None:
     for index, recipe in enumerate(recipes):
         matching = len(set(selected_tags) & set(recipe.ingredient_tags))
         with columns[index % 2]:
-            render_image_safe(asset_path(recipe, "finished"))
+            st.image(str(asset_path(recipe, "finished")), use_column_width=True)
             st.markdown(f"### {recipe.title}")
             st.caption(f"1인분 · 약 {recipe.total_minutes}분")
             if selected_tags:
                 st.caption(f"선택 재료 {matching}개 포함")
-            if st.button("메뉴 자세히 보기", key=f"open-{recipe.folder}", width="stretch"):
+            if st.button("메뉴 자세히 보기", key=f"open-{recipe.folder}", use_container_width=True):
                 st.session_state.recipe_folder = recipe.folder
                 st.session_state.phase = "detail"
                 st.rerun()
@@ -405,10 +495,26 @@ def render_detail(recipe: Recipe) -> None:
 
     st.markdown(f'<h1 class="main-title">{recipe.title}</h1>', unsafe_allow_html=True)
     st.caption(f"1인분 · 총 소요 시간 약 {recipe.total_minutes}분")
-    render_image_safe(asset_path(recipe, "finished"))
+    st.image(str(asset_path(recipe, "finished")), use_column_width=True)
 
     st.subheader("오늘의 재료")
     st.markdown("\n".join(f"- {ingredient}" for ingredient in recipe.ingredients))
+
+    if recipe.variant == "A":
+        with st.expander("도구 대체 팁 · 전자레인지 도움말"):
+            st.markdown(
+                "- 칼과 도마 대신 전자레인지용 그릇 안에서 주방가위로 자르세요.\n"
+                "- 전자레인지용 그릇만 사용하고, 금속 장식이 있는 그릇이나 밀폐 뚜껑은 쓰지 마세요.\n"
+                "- 접시는 틈을 남겨 덮고, 뜨거운 그릇은 마른 행주나 오븐 장갑으로 잡으세요.\n"
+                "- 출력이 불확실하면 1분부터 짧게 돌리고, 상태를 확인하며 20초씩 추가하세요."
+            )
+    else:
+        with st.expander("도구와 화력 도움말"):
+            st.markdown(
+                "- 강불: 물을 빠르게 끓이거나 팬을 달굴 때 사용해요.\n"
+                "- 중불: 재료를 고르게 익히고 볶을 때 사용해요.\n"
+                "- 약불: 양념이 타지 않게 천천히 익히거나 마무리할 때 사용해요."
+            )
 
     savings = calculate_savings(recipe.title)
     st.subheader("오늘의 절감액")
@@ -421,13 +527,13 @@ def render_detail(recipe: Recipe) -> None:
     )
 
     st.subheader("요리 순서 한눈에 보기")
-    render_image_safe(asset_path(recipe, "infographic"))
+    st.image(str(asset_path(recipe, "infographic")), use_column_width=True)
 
     with st.expander("참고 레시피 출처"):
         for source in recipe.sources:
             st.markdown(f"- {source}")
 
-    if st.button("요리 시작하기", type="primary", width="stretch"):
+    if st.button("요리 시작하기", type="primary", use_container_width=True):
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.session_state.auto_advance = False
@@ -458,10 +564,16 @@ def render_cooking(recipe: Recipe) -> None:
 
     badge, setting = st.columns([1, 2])
     with badge:
-        st.markdown(
-            f'<div class="time-badge">⏱ 예상 약 {step.minutes}분</div>',
-            unsafe_allow_html=True,
-        )
+        if recipe.variant == "A" and step.microwave_minutes_700w is not None:
+            minutes = selected_microwave_minutes(step)
+            time_label = (
+                f"전자레인지 {st.session_state.microwave_wattage} · 약 {minutes}분"
+                if minutes is not None
+                else "출력 모름 · 1분부터 짧게 확인"
+            )
+        else:
+            time_label = f"예상 약 {step.minutes}분"
+        st.markdown(f'<div class="time-badge">⏱ {time_label}</div>', unsafe_allow_html=True)
     with setting:
         st.checkbox(
             "자동 다음 단계 (예상 시간)",
@@ -470,25 +582,23 @@ def render_cooking(recipe: Recipe) -> None:
         )
 
     st.subheader(step.title)
-    step_img_path = resolve_existing_path(asset_path(recipe, "image", step_index + 1))
-    if step_img_path is not None:
-        st.image(step_image_canvas(str(step_img_path)), width="stretch")
-    else:
-        st.warning(f"단계 이미지 파일을 찾을 수 없어요: {step_index + 1}단계")
-    st.info(step.instruction)
+    st.image(
+        step_image_canvas(str(asset_path(recipe, "image", step_index + 1))),
+        use_column_width=True,
+    )
+    st.info(cooking_instruction(step))
 
-    audio_path = resolve_existing_path(asset_path(recipe, "voice", step_index + 1))
-    if audio_path is not None:
-        audio_bytes = read_asset(str(audio_path))
+    audio_base64 = ""
+    if recipe.variant != "A":
+        audio_bytes = read_asset(str(asset_path(recipe, "voice", step_index + 1)))
         audio_base64 = base64.b64encode(audio_bytes).decode("ascii")
-    else:
-        st.warning(f"음성 파일을 찾을 수 없어요: {step_index + 1}단계")
-        audio_base64 = ""
-
+    microwave_step = recipe.variant == "A" and step.microwave_minutes_700w is not None
+    cook_minutes = selected_microwave_minutes(step) if microwave_step else step.minutes
     event: Any = CONTROLS_COMPONENT(
         audio_base64=audio_base64,
-        auto_advance=st.session_state.auto_advance,
-        cook_seconds=step.minutes * 60,
+        auto_advance=st.session_state.auto_advance and (not microwave_step or cook_minutes is not None),
+        cook_seconds=(cook_minutes or (1 if microwave_step else step.minutes)) * 60,
+        heating_step=microwave_step,
         step_number=step_index + 1,
         can_go_back=step_index > 0,
         colors=THEME_PALETTES[st.session_state.theme],
@@ -515,12 +625,12 @@ def render_cooking(recipe: Recipe) -> None:
 def render_done(recipe: Recipe) -> None:
     st.markdown('<div class="eyebrow">오늘의 요리 완료</div>', unsafe_allow_html=True)
     st.markdown(f'<h1 class="main-title">{recipe.title} 완성!</h1>', unsafe_allow_html=True)
-    render_image_safe(asset_path(recipe, "finished"))
+    st.image(str(asset_path(recipe, "finished")), use_column_width=True)
     st.success("수고하셨어요. 맛있게 드세요!")
-    if st.button("다른 메뉴 고르기", type="primary", width="stretch"):
+    if st.button("다른 메뉴 고르기", type="primary", use_container_width=True):
         st.session_state.phase = "home"
         st.rerun()
-    if st.button("이 메뉴 다시 요리하기", width="stretch"):
+    if st.button("이 메뉴 다시 요리하기", use_container_width=True):
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.rerun()
@@ -537,6 +647,10 @@ def main() -> None:
     st.session_state.setdefault("recipe_folder", RECIPES[0].folder)
     st.session_state.setdefault("step_index", 0)
     st.session_state.setdefault("auto_advance", False)
+    st.session_state.setdefault("kitchen_profile", "B")
+    st.session_state.setdefault("microwave_wattage", "700W")
+    st.session_state.setdefault("kitchen_profile_selector", st.session_state.kitchen_profile)
+    st.session_state.setdefault("microwave_wattage_selector", st.session_state.microwave_wattage)
     st.session_state.setdefault("theme", "Default")
     if st.session_state.theme not in THEME_PALETTES:
         st.session_state.theme = "Default"
@@ -650,9 +764,10 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+    available_recipes = recipes_for_profile()
     recipe = next(
-        (item for item in RECIPES if item.folder == st.session_state.recipe_folder),
-        RECIPES[0],
+        (item for item in available_recipes if item.folder == st.session_state.recipe_folder),
+        available_recipes[0],
     )
     phase = st.session_state.phase
     if phase == "home":
