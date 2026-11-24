@@ -66,6 +66,7 @@
     let transitionTimer = null;
     let transitionStartedAt = 0;
     let pending = false;
+    let heatingReady = true;
 
     function send(action) {
       window.parent.postMessage({
@@ -87,17 +88,35 @@
     }
 
     function startCookingTimer() {
-      if (!args || !args.auto_advance || !audio.ended || cookingTimer !== null) return;
+      if (!args || cookingTimer !== null) return;
+      if (!args.heating_step && (!args.auto_advance || (args.audio_base64 && !audio.ended))) return;
+      if (Number(args.cook_seconds) <= 0) {
+        heatingReady = true;
+        nextButton.disabled = false;
+        if (args.heating_step) status.textContent = "출력을 모르면 1분부터 짧게 가열하고 20초씩 추가해 확인하세요.";
+        return;
+      }
       const deadline = Date.now() + Number(args.cook_seconds) * 1000;
-      status.textContent = "음성 안내 종료 후 예상 시간에 자동 전환됩니다.";
+      status.textContent = args.heating_step
+        ? "전자레인지 가열 시간입니다. 시간이 끝날 때까지 기다려 주세요."
+        : "음성 안내 종료 후 예상 시간에 자동 전환됩니다.";
       cookingTimer = window.setInterval(() => {
         const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
         const minutes = Math.floor(remaining / 60);
         const seconds = String(remaining % 60).padStart(2, "0");
-        status.textContent = `예상 전환까지 ${minutes}:${seconds}`;
+        status.textContent = args.heating_step
+          ? `전자레인지 가열 중 ${minutes}:${seconds}`
+          : `예상 전환까지 ${minutes}:${seconds}`;
         if (remaining === 0) {
           clearCookingTimer();
-          send("next");
+          heatingReady = true;
+          nextButton.disabled = false;
+          if (args.heating_step) {
+            status.textContent = "전자레인지가 끝났으면 다음 단계로 넘어가세요.";
+            if (args.auto_advance) window.setTimeout(beginTransition, 1500);
+          } else {
+            send("next");
+          }
         }
       }, 250);
     }
@@ -132,12 +151,21 @@
         currentStep = stepKey;
         clearCookingTimer();
         pending = false;
+        heatingReady = !args.heating_step;
         progressFill.style.width = "0";
-        audio.src = `data:audio/mpeg;base64,${args.audio_base64}`;
-        audio.load();
+        audio.hidden = !args.audio_base64;
+        if (args.audio_base64) {
+          audio.src = `data:audio/mpeg;base64,${args.audio_base64}`;
+          audio.load();
+        } else {
+          audio.removeAttribute("src");
+          audio.load();
+        }
         status.textContent = "";
+        nextButton.disabled = Boolean(args.heating_step && Number(args.cook_seconds) > 0);
+        if (args.heating_step || (!args.audio_base64 && args.auto_advance)) startCookingTimer();
       } else if (!args.auto_advance) {
-        clearCookingTimer();
+        if (!args.heating_step) clearCookingTimer();
       } else {
         startCookingTimer();
       }
@@ -145,13 +173,19 @@
       nextButton.textContent = Number(args.step_number) === 5 ? "요리 완료" : "다음 단계";
     }
 
-    nextButton.addEventListener("click", beginTransition);
+    nextButton.addEventListener("click", () => {
+      if (!heatingReady) {
+        status.textContent = "전자레인지 가열 시간이 끝날 때까지 기다려 주세요.";
+        return;
+      }
+      beginTransition();
+    });
     previousButton.addEventListener("click", () => {
       clearCookingTimer();
       send("previous");
     });
     audio.addEventListener("ended", () => {
-      if (args && args.auto_advance) startCookingTimer();
+      if (args && (args.auto_advance || args.heating_step)) startCookingTimer();
       else status.textContent = "음성 안내가 끝났어요. 준비되면 다음 단계로 넘어가세요.";
     });
     audio.addEventListener("play", () => {
