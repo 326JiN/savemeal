@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
+import unicodedata
 
 from PIL import Image
 import streamlit as st
@@ -574,28 +575,96 @@ def show_image_safe(image_obj: Any, caption: str | None = None, missing_text: st
     st.image(image_obj, caption=caption, width="stretch")
 
 
+def _resolve_folder(base_dir: Path, folder_name: str) -> Path:
+    direct = base_dir / folder_name
+    if direct.exists() and direct.is_dir():
+        return direct
+    for form in ("NFC", "NFD"):
+        candidate = base_dir / unicodedata.normalize(form, folder_name)
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    if base_dir.exists() and base_dir.is_dir():
+        target_nfc = unicodedata.normalize("NFC", folder_name)
+        target_nfd = unicodedata.normalize("NFD", folder_name)
+        for entry in base_dir.iterdir():
+            if entry.is_dir():
+                en_nfc = unicodedata.normalize("NFC", entry.name)
+                en_nfd = unicodedata.normalize("NFD", entry.name)
+                if target_nfc in (en_nfc, en_nfd) or target_nfd in (en_nfc, en_nfd):
+                    return entry
+    return direct
+
+
+def _find_file_flexible(
+    folder: Path,
+    stem_candidates: list[str],
+    extensions: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".webp"),
+) -> Path | None:
+    if not folder.exists() or not folder.is_dir():
+        return None
+
+    normalized_stems = set()
+    for s in stem_candidates:
+        normalized_stems.add(unicodedata.normalize("NFC", s))
+        normalized_stems.add(unicodedata.normalize("NFD", s))
+
+    allowed_exts = {e.lower() for e in extensions}
+
+    for ext in extensions:
+        for stem in stem_candidates:
+            for form in ("NFC", "NFD"):
+                p = folder / f"{unicodedata.normalize(form, stem)}{ext}"
+                if p.exists() and p.is_file():
+                    return p
+
+    for entry in folder.iterdir():
+        if not entry.is_file():
+            continue
+        if entry.suffix.lower() not in allowed_exts:
+            continue
+        entry_stem_nfc = unicodedata.normalize("NFC", entry.stem)
+        entry_stem_nfd = unicodedata.normalize("NFD", entry.stem)
+        if entry_stem_nfc in normalized_stems or entry_stem_nfd in normalized_stems:
+            return entry
+
+    return None
+
+
 def asset_path(recipe: Recipe, kind: str, step: int | None = None) -> Path:
-    folder = APP_DIR / recipe.folder
+    folder = _resolve_folder(APP_DIR, recipe.folder)
     if recipe.variant == "A":
-        folder = folder / "A안_전자레인지"
+        folder = _resolve_folder(folder, "A안_전자레인지")
         if kind == "finished":
-            return folder / f"{recipe.folder}_A_0_완성이미지.png"
+            stems = [f"{recipe.folder}_A_0_완성이미지", f"{recipe.folder}_0_완성이미지"]
+            found = _find_file_flexible(folder, stems)
+            return found if found else folder / f"{recipe.folder}_A_0_완성이미지.png"
         if kind == "infographic":
-            return folder / f"{recipe.folder}_A_0_인포그래픽.png"
+            stems = [f"{recipe.folder}_A_0_인포그래픽", f"{recipe.folder}_0_인포그래픽"]
+            found = _find_file_flexible(folder, stems)
+            return found if found else folder / f"{recipe.folder}_A_0_인포그래픽.png"
         if step is None:
             raise ValueError(f"A step number is required for {kind} assets.")
         if kind == "image":
-            return folder / f"{recipe.folder}_A_{step}단계_이미지.png"
+            stems = [f"{recipe.folder}_A_{step}단계_이미지", f"{recipe.folder}_{step}단계_이미지"]
+            found = _find_file_flexible(folder, stems)
+            return found if found else folder / f"{recipe.folder}_A_{step}단계_이미지.png"
         raise ValueError(f"No {kind} asset is available for the microwave recipe.")
 
     if kind == "finished":
-        return folder / f"{recipe.folder}_0_완성이미지.png"
+        found = _find_file_flexible(folder, [f"{recipe.folder}_0_완성이미지"])
+        return found if found else folder / f"{recipe.folder}_0_완성이미지.png"
     if kind == "infographic":
-        return folder / f"{recipe.folder}_0_인포그래픽.png"
+        found = _find_file_flexible(folder, [f"{recipe.folder}_0_인포그래픽"])
+        return found if found else folder / f"{recipe.folder}_0_인포그래픽.png"
     if step is None:
         raise ValueError(f"A step number is required for {kind} assets.")
-    suffix = "이미지.png" if kind == "image" else "voice.mp3"
-    return folder / f"{recipe.folder}_{step}단계_{suffix}"
+    if kind == "image":
+        found = _find_file_flexible(folder, [f"{recipe.folder}_{step}단계_이미지"])
+        return found if found else folder / f"{recipe.folder}_{step}단계_이미지.png"
+    found_audio = _find_file_flexible(
+        folder, [f"{recipe.folder}_{step}단계_voice"], extensions=(".mp3", ".wav", ".m4a")
+    )
+    return found_audio if found_audio else folder / f"{recipe.folder}_{step}단계_voice.mp3"
 
 
 def recipes_for_profile() -> tuple[Recipe, ...]:
@@ -776,7 +845,10 @@ def render_cooking(recipe: Recipe) -> None:
         )
 
     st.subheader(step.title)
-    show_image_safe(step_image_canvas(str(asset_path(recipe, "image", step_index + 1))), missing_text="단계 이미지 준비 중")
+    show_image_safe(
+        step_image_canvas(str(asset_path(recipe, "image", step_index + 1))),
+        missing_text="단계 이미지 준비 중",
+    )
     st.info(cooking_instruction(step))
 
     audio_base64 = ""
