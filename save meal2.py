@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+import time
 from typing import Any
 import unicodedata
 
@@ -529,10 +530,29 @@ def select_theme(name: str) -> None:
 
 def select_kitchen_profile() -> None:
     st.session_state.kitchen_profile = st.session_state.kitchen_profile_selector
+    reset_step_timer()
 
 
 def select_microwave_wattage() -> None:
     st.session_state.microwave_wattage = st.session_state.microwave_wattage_selector
+    reset_step_timer()
+
+
+def reset_step_timer() -> None:
+    st.session_state.step_timer_started_at = time.monotonic()
+
+
+def sync_auto_advance_timer(timer_key: str) -> None:
+    if not st.session_state.auto_advance:
+        st.session_state.step_timer_key = None
+        st.session_state.step_timer_started_at = None
+        return
+    if (
+        st.session_state.get("step_timer_key") != timer_key
+        or st.session_state.get("step_timer_started_at") is None
+    ):
+        st.session_state.step_timer_key = timer_key
+        st.session_state.step_timer_started_at = time.monotonic()
 
 
 @st.cache_data(show_spinner=False)
@@ -677,6 +697,14 @@ def selected_microwave_minutes(step: Step) -> int | None:
     return None
 
 
+def step_duration_seconds(recipe: Recipe, step: Step) -> int:
+    if recipe.variant == "A" and step.microwave_minutes_700w is not None:
+        minutes = selected_microwave_minutes(step)
+        if minutes is not None:
+            return max(1, minutes * 60)
+    return max(1, step.minutes * 60)
+
+
 def cooking_instruction(step: Step) -> str:
     if step.microwave_minutes_700w is None:
         return step.instruction
@@ -798,14 +826,19 @@ def render_detail(recipe: Recipe) -> None:
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.session_state.auto_advance = False
+        st.session_state.step_timer_key = None
+        st.session_state.step_timer_started_at = None
         st.rerun()
 
 
 def advance_step(recipe: Recipe, step_index: int) -> None:
     if step_index + 1 >= len(recipe.steps):
         st.session_state.phase = "done"
+        st.session_state.step_timer_key = None
+        st.session_state.step_timer_started_at = None
         return
     st.session_state.step_index = step_index + 1
+    reset_step_timer()
 
 
 def format_step_time_label(recipe: Recipe, step: Step) -> str:
@@ -817,10 +850,19 @@ def format_step_time_label(recipe: Recipe, step: Step) -> str:
     return f"예상 약 {step.minutes}분"
 
 
+def format_countdown(seconds: int) -> str:
+    clamped = max(0, seconds)
+    mins, secs = divmod(clamped, 60)
+    return f"{mins:02d}:{secs:02d}"
+
+
 def render_cooking(recipe: Recipe) -> None:
     step_index = min(max(st.session_state.step_index, 0), len(recipe.steps) - 1)
     st.session_state.step_index = step_index
     step = recipe.steps[step_index]
+
+    timer_key = f"{recipe.folder}-{recipe.variant}-{step_index}"
+    sync_auto_advance_timer(timer_key)
 
     st.markdown(f'<h1 class="main-title">{recipe.title}</h1>', unsafe_allow_html=True)
     st.caption(f"STEP {step_index + 1} / {len(recipe.steps)} · 단계 번호를 눌러 이동할 수 있어요")
@@ -837,6 +879,7 @@ def render_cooking(recipe: Recipe) -> None:
                 type="primary" if state == "current" else "secondary",
             ):
                 st.session_state.step_index = index
+                reset_step_timer()
                 st.rerun()
 
     badge, setting = st.columns([1.4, 1])
@@ -847,8 +890,16 @@ def render_cooking(recipe: Recipe) -> None:
         st.checkbox(
             "자동 다음 단계 (예상 시간)",
             key="auto_advance",
-            help="출처에 없는 예상 조리 시간으로 자동 전환합니다.",
+            on_change=reset_step_timer,
+            help="단계별 예상 시간 기준으로 자동 전환합니다.",
         )
+
+    remaining_seconds: int | None = None
+    if st.session_state.auto_advance and st.session_state.get("step_timer_started_at") is not None:
+        duration = step_duration_seconds(recipe, step)
+        elapsed = time.monotonic() - float(st.session_state.step_timer_started_at)
+        remaining_seconds = max(0, int(duration - elapsed + 0.999))
+        st.info(f"자동 전환 타이머 작동 중 · 남은 시간 {format_countdown(remaining_seconds)}")
 
     st.subheader(step.title)
     show_image_safe(
@@ -875,6 +926,7 @@ def render_cooking(recipe: Recipe) -> None:
     with col_prev:
         if st.button("이전 단계", key=f"prev-{recipe.folder}-{step_index}", disabled=step_index == 0, width="stretch"):
             st.session_state.step_index = step_index - 1
+            reset_step_timer()
             st.rerun()
     with col_next:
         next_label = "요리 완료" if step_index + 1 >= len(recipe.steps) else "다음 단계"
@@ -883,7 +935,16 @@ def render_cooking(recipe: Recipe) -> None:
             st.rerun()
 
     if st.button("요리 안내 종료", key="exit-cook"):
+        st.session_state.step_timer_key = None
+        st.session_state.step_timer_started_at = None
         st.session_state.phase = "detail"
+        st.rerun()
+
+    if st.session_state.auto_advance and remaining_seconds is not None:
+        if remaining_seconds <= 0:
+            advance_step(recipe, step_index)
+            st.rerun()
+        time.sleep(1)
         st.rerun()
 
 
@@ -914,6 +975,8 @@ def main() -> None:
     st.session_state.setdefault("recipe_folder", RECIPES[0].folder)
     st.session_state.setdefault("step_index", 0)
     st.session_state.setdefault("auto_advance", False)
+    st.session_state.setdefault("step_timer_key", None)
+    st.session_state.setdefault("step_timer_started_at", None)
     st.session_state.setdefault("kitchen_profile", "B")
     st.session_state.setdefault("microwave_wattage", "700W")
     st.session_state.setdefault("kitchen_profile_selector", st.session_state.kitchen_profile)
