@@ -6,15 +6,17 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
 import streamlit as st
 import streamlit.components.v1 as components
-from PIL import Image
-
 
 APP_DIR = Path(__file__).resolve().parent
-CONTROLS_COMPONENT = components.declare_component(
-    "savemeal_cooking_controls",
-    path=str(APP_DIR / "components" / "cooking_controls"),
+CONTROLS_DIR = APP_DIR / "components" / "cooking_controls"
+
+CONTROLS_COMPONENT: Any = (
+    components.declare_component("savemeal_cooking_controls", path=str(CONTROLS_DIR))
+    if CONTROLS_DIR.exists()
+    else None
 )
 
 
@@ -43,7 +45,7 @@ class Recipe:
 DELIVERY_FEE = 3_000
 
 # 원본 절감액 계산 표의 구매단위 단가(원)입니다.
-UNIT_PRICES = {
+UNIT_PRICES: dict[str, float] = {
     "밥": 2133 / 210,
     "신김치": 29206 / 2600,
     "스팸": 5323 / 200,
@@ -65,15 +67,56 @@ UNIT_PRICES = {
     "식초": 3896 / 900,
 }
 
-RECIPE_COST_USAGE = {
-    "김치스팸볶음밥": {"밥": (200, "g"), "신김치": (100, "g"), "스팸": (67, "g"), "계란": (1, "개"), "식용유": (30, "ml"), "참기름": (7.5, "ml")},
-    "김치찌개": {"신김치": (100, "g"), "돼지고기": (100, "g"), "두부": (150, "g"), "대파": (25, "g"), "고춧가루": (7, "g"), "다진마늘": (7, "g"), "간장": (15, "ml"), "식용유": (15, "ml"), "물": (360, "ml")},
-    "참치마요덮밥": {"밥": (200, "g"), "참치캔": (100, "g"), "마요네즈": (30, "g"), "계란": (2, "개"), "식용유": (7.5, "ml")},
-    "제육볶음덮밥": {"밥": (200, "g"), "돼지고기": (150, "g"), "양파": (50, "g"), "대파": (25, "g"), "식용유": (15, "ml"), "고추장": (30, "g"), "간장": (15, "ml"), "설탕": (12, "g"), "다진마늘": (7, "g")},
-    "비빔국수": {"소면": (100, "g"), "신김치": (50, "g"), "고추장": (30, "g"), "설탕": (6, "g"), "식초": (7.5, "ml"), "참기름": (7.5, "ml"), "물": (720, "ml")},
+RECIPE_COST_USAGE: dict[str, dict[str, tuple[float, str]]] = {
+    "김치스팸볶음밥": {
+        "밥": (200, "g"),
+        "신김치": (100, "g"),
+        "스팸": (67, "g"),
+        "계란": (1, "개"),
+        "식용유": (30, "ml"),
+        "참기름": (7.5, "ml"),
+    },
+    "김치찌개": {
+        "신김치": (100, "g"),
+        "돼지고기": (100, "g"),
+        "두부": (150, "g"),
+        "대파": (25, "g"),
+        "고춧가루": (7, "g"),
+        "다진마늘": (7, "g"),
+        "간장": (15, "ml"),
+        "식용유": (15, "ml"),
+        "물": (360, "ml"),
+    },
+    "참치마요덮밥": {
+        "밥": (200, "g"),
+        "참치캔": (100, "g"),
+        "마요네즈": (30, "g"),
+        "계란": (2, "개"),
+        "식용유": (7.5, "ml"),
+    },
+    "제육볶음덮밥": {
+        "밥": (200, "g"),
+        "돼지고기": (150, "g"),
+        "양파": (50, "g"),
+        "대파": (25, "g"),
+        "식용유": (15, "ml"),
+        "고추장": (30, "g"),
+        "간장": (15, "ml"),
+        "설탕": (12, "g"),
+        "다진마늘": (7, "g"),
+    },
+    "비빔국수": {
+        "소면": (100, "g"),
+        "신김치": (50, "g"),
+        "고추장": (30, "g"),
+        "설탕": (6, "g"),
+        "식초": (7.5, "ml"),
+        "참기름": (7.5, "ml"),
+        "물": (720, "ml"),
+    },
 }
 
-DELIVERY_PRICES = {
+DELIVERY_PRICES: dict[str, int] = {
     "김치스팸볶음밥": 5200,
     "김치찌개": 6000,
     "참치마요덮밥": 3800,
@@ -82,13 +125,19 @@ DELIVERY_PRICES = {
 }
 
 
-def calculate_savings(menu_name: str) -> dict[str, int]:
+def calculate_savings(menu_name: str) -> dict[str, int] | None:
+    usage_map = RECIPE_COST_USAGE.get(menu_name)
+    delivery_price = DELIVERY_PRICES.get(menu_name)
+    if not usage_map or delivery_price is None:
+        return None
+
     cost = sum(
-        Decimal(str(usage)) * Decimal(str(UNIT_PRICES.get(ingredient, 0))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        for ingredient, (usage, _unit) in RECIPE_COST_USAGE[menu_name].items()
+        (Decimal(str(usage)) * Decimal(str(UNIT_PRICES.get(ingredient, 0)))).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        for ingredient, (usage, _unit) in usage_map.items()
     )
     ingredient_cost = int(round(cost))
-    delivery_price = DELIVERY_PRICES[menu_name]
     delivery_total = delivery_price + DELIVERY_FEE
     return {
         "ingredient_cost": ingredient_cost,
@@ -99,7 +148,7 @@ def calculate_savings(menu_name: str) -> dict[str, int]:
     }
 
 
-RECIPES = (
+RECIPES: tuple[Recipe, ...] = (
     Recipe(
         folder="김치스팸볶음밥",
         title="김치스팸볶음밥",
@@ -115,11 +164,36 @@ RECIPES = (
         ),
         ingredient_tags=("밥", "김치", "스팸", "계란"),
         steps=(
-            Step("재료 썰기", 3, "김치 종이컵 1컵은 가위로 1cm 폭으로 자르고, 스팸 종이컵 ½컵은 새끼손톱 크기로 썰어 주세요. 칼날 반대쪽에 손가락을 두세요.", "일 단계, 재료 썰기. 김치는 가위로 일 센티미터 폭으로 자르고 스팸은 새끼손톱 크기로 썰어 주세요. 칼날 반대쪽에 손가락을 두세요."),
-            Step("계란 부치기", 2, "중불에 식용유 1숟가락을 두르고 계란 1개를 흰자가 익을 때까지 부쳐 접시에 옮겨 주세요. 기름이 튀니 얼굴을 팬에서 떼세요.", "이 단계, 계란 부치기. 중불에 식용유 한 숟가락을 두르고 계란을 흰자가 하얗게 굳을 때까지 부쳐 접시에 옮겨 주세요. 기름이 튀니 얼굴을 떼세요."),
-            Step("스팸 볶기", 2, "중불에 식용유 1숟가락을 두르고 스팸을 겉이 노릇해질 때까지 볶아 주세요.", "삼 단계, 스팸 볶기. 같은 팬에 식용유 한 숟가락을 두르고 스팸을 겉이 노릇해질 때까지 볶아 주세요."),
-            Step("김치 볶기", 2, "중불에서 김치를 넣고 숨이 죽을 때까지 볶아 주세요. 많이 시면 설탕 ½숟가락을 넣으세요.", "사 단계, 김치 볶기. 중불 그대로 김치를 넣고 숨이 죽을 때까지 볶아 주세요. 김치가 많이 시면 설탕 반 숟가락을 넣으세요."),
-            Step("밥 볶기", 3, "약불로 줄이고 찬밥 종이컵 1컵 반을 넣어 덩어리를 풀며 볶아 주세요. 불을 끄고 참기름 ½숟가락을 두른 뒤 계란을 올리세요.", "오 단계, 밥 볶기. 약불로 줄이고 찬밥을 넣어 덩어리를 풀며 볶아 주세요. 불을 끄고 참기름 반 숟가락을 두른 뒤 계란을 올리면 완성이에요."),
+            Step(
+                "재료 썰기",
+                3,
+                "김치 종이컵 1컵은 가위로 1cm 폭으로 자르고, 스팸 종이컵 ½컵은 새끼손톱 크기로 썰어 주세요. 칼날 반대쪽에 손가락을 두세요.",
+                "일 단계, 재료 썰기. 김치는 가위로 일 센티미터 폭으로 자르고 스팸은 새끼손톱 크기로 썰어 주세요. 칼날 반대쪽에 손가락을 두세요.",
+            ),
+            Step(
+                "계란 부치기",
+                2,
+                "중불에 식용유 1숟가락을 두르고 계란 1개를 흰자가 익을 때까지 부쳐 접시에 옮겨 주세요. 기름이 튀니 얼굴을 팬에서 떼세요.",
+                "이 단계, 계란 부치기. 중불에 식용유 한 숟가락을 두르고 계란을 흰자가 하얗게 굳을 때까지 부쳐 접시에 옮겨 주세요. 기름이 튀니 얼굴을 팬에서 떼세요.",
+            ),
+            Step(
+                "스팸 볶기",
+                2,
+                "중불에 식용유 1숟가락을 두르고 스팸을 겉이 노릇해질 때까지 볶아 주세요.",
+                "삼 단계, 스팸 볶기. 같은 팬에 식용유 한 숟가락을 두르고 스팸을 겉이 노릇해질 때까지 볶아 주세요.",
+            ),
+            Step(
+                "김치 볶기",
+                2,
+                "중불에서 김치를 넣고 숨이 죽을 때까지 볶아 주세요. 많이 시면 설탕 ½숟가락을 넣으세요.",
+                "사 단계, 김치 볶기. 중불 그대로 김치를 넣고 숨이 죽을 때까지 볶아 주세요. 김치가 많이 시면 설탕 반 숟가락을 넣으세요.",
+            ),
+            Step(
+                "밥 볶기",
+                3,
+                "약불로 줄이고 찬밥 종이컵 1컵 반을 넣어 덩어리를 풀며 볶아 주세요. 불을 끄고 참기름 ½숟가락을 두른 뒤 계란을 올리세요.",
+                "오 단계, 밥 볶기. 약불로 줄이고 찬밥을 넣어 덩어리를 풀며 볶아 주세요. 불을 끄고 참기름 반 숟가락을 두른 뒤 계란을 올리면 완성이에요.",
+            ),
         ),
         sources=(
             "써지니, 만개의레시피, https://www.10000recipe.com/recipe/7021642",
@@ -144,11 +218,36 @@ RECIPES = (
         ),
         ingredient_tags=("김치", "돼지고기", "대파", "두부"),
         steps=(
-            Step("재료 썰기", 3, "김치 종이컵 1컵은 가위로 2cm 폭으로 자르고 목살 종이컵 1컵은 한입 크기로 썰어 주세요. 대파 ¼대와 선택한 두부도 썰고 칼날 반대쪽에 손가락을 두세요.", "일 단계, 재료 썰기. 김치는 가위로 이 센티미터 폭으로 자르고 목살은 한입 크기, 대파는 어슷하게 썰어 주세요. 칼날 반대쪽에 손가락을 두세요."),
-            Step("고기·김치 볶기", 4, "중불에 식용유 1숟가락을 두르고 목살을 볶은 뒤 김치를 넣어 숨이 죽을 때까지 볶아 주세요. 많이 시면 설탕 ½숟가락을 넣으세요.", "이 단계, 고기와 김치 볶기. 중불에 식용유 한 숟가락을 두르고 목살을 겉면 색이 변할 때까지 볶은 뒤 김치를 넣어 숨이 죽을 때까지 볶아 주세요. 김치가 많이 시면 설탕 반 숟가락을 넣으세요."),
-            Step("물 붓고 끓이기", 5, "물 종이컵 2컵을 붓고 강불에서 끓어오를 때까지 기다려 주세요. 끓는 국물이 튀니 얼굴을 냄비에서 떼세요.", "삼 단계, 물 붓고 끓이기. 물 두 컵을 붓고 강불에서 끓어오를 때까지 기다려 주세요. 국물이 튀니 얼굴을 떼세요."),
-            Step("양념 넣기", 7, "중불로 줄이고 고춧가루 1숟가락, 다진마늘 ½숟가락, 국간장 1숟가락을 넣어 끓여 주세요.", "사 단계, 양념 넣기. 중불로 줄이고 고춧가루 한 숟가락, 다진마늘 반 숟가락, 국간장 한 숟가락을 넣어 칠 분 정도 끓여 주세요."),
-            Step("대파 넣고 마무리", 3, "선택한 두부와 대파를 넣고 약불에서 3분 더 끓인 뒤 불을 꺼 주세요.", "오 단계, 대파 넣고 마무리. 두부와 대파를 넣고 약불에서 삼 분 정도 더 끓인 뒤 불을 끄면 완성이에요."),
+            Step(
+                "재료 썰기",
+                3,
+                "김치 종이컵 1컵은 가위로 2cm 폭으로 자르고 목살 종이컵 1컵은 한입 크기로 썰어 주세요. 대파 ¼대와 선택한 두부도 썰고 칼날 반대쪽에 손가락을 두세요.",
+                "일 단계, 재료 썰기. 김치는 가위로 이 센티미터 폭으로 자르고 목살은 한입 크기, 대파는 어슷하게 썰어 주세요. 칼날 반대쪽에 손가락을 두세요.",
+            ),
+            Step(
+                "고기·김치 볶기",
+                4,
+                "중불에 식용유 1숟가락을 두르고 목살을 볶은 뒤 김치를 넣어 숨이 죽을 때까지 볶아 주세요. 많이 시면 설탕 ½숟가락을 넣으세요.",
+                "이 단계, 고기와 김치 볶기. 중불에 식용유 한 숟가락을 두르고 목살을 겉면 색이 변할 때까지 볶은 뒤 김치를 넣어 숨이 죽을 때까지 볶아 주세요. 김치가 많이 시면 설탕 반 숟가락을 넣으세요.",
+            ),
+            Step(
+                "물 붓고 끓이기",
+                5,
+                "물 종이컵 2컵을 붓고 강불에서 끓어오를 때까지 기다려 주세요. 끓는 국물이 튀니 얼굴을 냄비에서 떼세요.",
+                "삼 단계, 물 붓고 끓이기. 물 두 컵을 붓고 강불에서 끓어오를 때까지 기다려 주세요. 국물이 튀니 얼굴을 떼세요.",
+            ),
+            Step(
+                "양념 넣기",
+                7,
+                "중불로 줄이고 고춧가루 1숟가락, 다진마늘 ½숟가락, 국간장 1숟가락을 넣어 끓여 주세요.",
+                "사 단계, 양념 넣기. 중불로 줄이고 고춧가루 한 숟가락, 다진마늘 반 숟가락, 국간장 한 숟가락을 넣어 칠 분 정도 끓여 주세요.",
+            ),
+            Step(
+                "대파 넣고 마무리",
+                3,
+                "선택한 두부와 대파를 넣고 약불에서 3분 더 끓인 뒤 불을 꺼 주세요.",
+                "오 단계, 대파 넣고 마무리. 두부와 대파를 넣고 약불에서 삼 분 정도 더 끓인 뒤 불을 꺼면 완성이에요.",
+            ),
         ),
         sources=(
             "요리다나와, 만개의레시피, https://www.10000recipe.com/recipe/6920236",
@@ -170,11 +269,36 @@ RECIPES = (
         ),
         ingredient_tags=("김치", "소면"),
         steps=(
-            Step("김치 썰기", 1, "김치 종이컵 ½컵을 가위로 잘게 잘라 주세요.", "일 단계, 김치 썰기. 김치를 가위로 잘게 잘라 주세요."),
-            Step("양념장 만들기", 2, "고추장 1½숟가락, 설탕 ½숟가락, 식초 ½숟가락, 참기름 ½숟가락을 먼저 섞어 주세요.", "이 단계, 양념장 만들기. 고추장 한 숟가락 반, 설탕과 식초, 참기름을 반 숟가락씩 넣어 먼저 섞어 주세요."),
-            Step("면 삶기", 4, "강불에서 소면을 삶고 끓어오를 때마다 찬물 ½컵씩 두 번 부은 뒤 세 번째에 불을 꺼 주세요. 면을 천천히 넣어 뜨거운 물이 튀지 않게 하세요.", "삼 단계, 면 삶기. 끓는 물에 소면을 천천히 넣고, 끓어오를 때마다 찬물 반 컵씩 두 번 부어 주세요. 세 번째로 끓으면 불을 끄세요."),
-            Step("면 헹구기", 2, "면을 체에 쏟아 찬물에 비벼 헹군 뒤 물기를 털어 주세요. 뜨거운 김에 데지 않게 얼굴을 떼세요.", "사 단계, 면 헹구기. 면을 체에 쏟아 찬물에 비벼 헹구고 물기를 털어 주세요. 뜨거운 김을 조심하세요."),
-            Step("비비기", 1, "양념장에 면과 김치를 넣고 고루 비벼 주세요.", "오 단계, 비비기. 양념장에 면과 김치를 넣고 고루 비비면 완성이에요."),
+            Step(
+                "김치 썰기",
+                1,
+                "김치 종이컵 ½컵을 가위로 잘게 잘라 주세요.",
+                "일 단계, 김치 썰기. 김치를 가위로 잘게 잘라 주세요.",
+            ),
+            Step(
+                "양념장 만들기",
+                2,
+                "고추장 1½숟가락, 설탕 ½숟가락, 식초 ½숟가락, 참기름 ½숟가락을 먼저 섞어 주세요.",
+                "이 단계, 양념장 만들기. 고추장 한 숟가락 반, 설탕과 식초, 참기름을 반 숟가락씩 넣어 먼저 섞어 주세요.",
+            ),
+            Step(
+                "면 삶기",
+                4,
+                "강불에서 소면을 삶고 끓어오를 때마다 찬물 ½컵씩 두 번 부은 뒤 세 번째에 불을 꺼 주세요. 면을 천천히 넣어 뜨거운 물이 튀지 않게 하세요.",
+                "삼 단계, 면 삶기. 끓는 물에 소면을 천천히 넣고, 끓어오를 때마다 찬물 반 컵씩 두 번 부어 주세요. 세 번째로 끓으면 불을 끄세요.",
+            ),
+            Step(
+                "면 헹구기",
+                2,
+                "면을 체에 쏟아 찬물에 비벼 헹군 뒤 물기를 털어 주세요. 뜨거운 김에 데지 않게 얼굴을 떼세요.",
+                "사 단계, 면 헹구기. 면을 체에 쏟아 찬물에 비벼 헹구고 물기를 털어 주세요. 뜨거운 김을 조심하세요.",
+            ),
+            Step(
+                "비비기",
+                1,
+                "양념장에 면과 김치를 넣고 고루 비벼 주세요.",
+                "오 단계, 비비기. 양념장에 면과 김치를 넣고 고루 비비면 완성이에요.",
+            ),
         ),
         sources=(
             "hancy002, 만개의레시피, https://www.10000recipe.com/recipe/6907160",
@@ -198,11 +322,36 @@ RECIPES = (
         ),
         ingredient_tags=("밥", "돼지고기", "양파", "대파"),
         steps=(
-            Step("재료 썰기", 3, "양파 ¼개는 채 썰고 대파 ¼대는 어슷하게 썰어 주세요. 고기는 핏물을 닦아 한입 크기로 썰고 칼날 반대쪽에 손가락을 두세요.", "일 단계, 재료 썰기. 양파는 채 썰고 대파는 어슷하게, 고기는 핏물을 닦아 한입 크기로 썰어 주세요. 칼날 반대쪽에 손가락을 두세요."),
-            Step("고기 양념하기", 12, "고추장 1½숟가락, 간장 1숟가락, 설탕 1숟가락, 다진마늘 ½숟가락을 섞어 고기를 버무리고 10분 두세요.", "이 단계, 고기 양념하기. 고추장 한 숟가락 반, 간장 한 숟가락, 설탕 한 숟가락, 다진마늘 반 숟가락을 섞고 고기를 고루 버무려 십 분 정도 두세요."),
-            Step("고기 볶기", 5, "중불에 식용유 1숟가락을 두르고 고기를 분홍빛이 사라질 때까지 볶아 주세요. 양념이 타지 않게 계속 뒤적이세요.", "삼 단계, 고기 볶기. 중불에 식용유 한 숟가락을 두르고 고기를 분홍빛이 사라질 때까지 볶아 주세요. 양념이 타지 않게 계속 뒤적이세요."),
-            Step("채소 넣고 볶기", 2, "양파를 넣어 숨이 죽을 때까지 볶고 대파를 넣어 섞은 뒤 불을 꺼 주세요.", "사 단계, 채소 넣고 볶기. 양파를 넣어 숨이 죽을 때까지 볶고 대파를 넣어 섞은 뒤 불을 꺼 주세요."),
-            Step("밥에 올리기", 1, "그릇에 밥 종이컵 1컵 반을 담고 제육볶음을 올려 주세요.", "오 단계, 밥에 올리기. 그릇에 밥을 담고 제육볶음을 올리면 완성이에요."),
+            Step(
+                "재료 썰기",
+                3,
+                "양파 ¼개는 채 썰고 대파 ¼대는 어슷하게 썰어 주세요. 고기는 핏물을 닦아 한입 크기로 썰고 칼날 반대쪽에 손가락을 두세요.",
+                "일 단계, 재료 썰기. 양파는 채 썰고 대파는 어슷하게, 고기는 핏물을 닦아 한입 크기로 썰어 주세요. 칼날 반대쪽에 손가락을 두세요.",
+            ),
+            Step(
+                "고기 양념하기",
+                12,
+                "고추장 1½숟가락, 간장 1숟가락, 설탕 1숟가락, 다진마늘 ½숟가락을 섞어 고기를 버무리고 10분 두세요.",
+                "이 단계, 고기 양념하기. 고추장 한 숟가락 반, 간장 한 숟가락, 설탕 한 숟가락, 다진마늘 반 숟가락을 섞고 고기를 고루 버무려 십 분 정도 두세요.",
+            ),
+            Step(
+                "고기 볶기",
+                5,
+                "중불에 식용유 1숟가락을 두르고 고기를 분홍빛이 사라질 때까지 볶아 주세요. 양념이 타지 않게 계속 뒤적이세요.",
+                "삼 단계, 고기 볶기. 중불에 식용유 한 숟가락을 두르고 고기를 분홍빛이 사라질 때까지 볶아 주세요. 양념이 타지 않게 계속 뒤적이세요.",
+            ),
+            Step(
+                "채소 넣고 볶기",
+                2,
+                "양파를 넣어 숨이 죽을 때까지 볶고 대파를 넣어 섞은 뒤 불을 꺼 주세요.",
+                "사 단계, 채소 넣고 볶기. 양파를 넣어 숨이 죽을 때까지 볶고 대파를 넣어 섞은 뒤 불을 꺼 주세요.",
+            ),
+            Step(
+                "밥에 올리기",
+                1,
+                "그릇에 밥 종이컵 1컵 반을 담고 제육볶음을 올려 주세요.",
+                "오 단계, 밥에 올리기. 그릇에 밥을 담고 제육볶음을 올리면 완성이에요.",
+            ),
         ),
         sources=(
             "만개의레시피, https://www.10000recipe.com/recipe/6899190",
@@ -223,11 +372,36 @@ RECIPES = (
         ),
         ingredient_tags=("밥", "참치", "계란"),
         steps=(
-            Step("참치 기름 빼기", 1, "참치캔 기름을 숟가락으로 눌러 따라 버려 주세요. 캔 뚜껑 가장자리를 조심하세요.", "일 단계, 참치 기름 빼기. 참치캔 기름을 숟가락으로 눌러 따라 버려 주세요. 캔 뚜껑 가장자리는 날카로우니 조심하세요."),
-            Step("참치마요 만들기", 2, "참치와 마요네즈 2숟가락을 고루 섞어 주세요.", "이 단계, 참치마요 만들기. 참치와 마요네즈 두 숟가락을 고루 섞어 주세요."),
-            Step("계란 스크램블", 2, "중불에 식용유 ½숟가락을 두르고 계란 2개를 풀어 저으며 익혀 주세요.", "삼 단계, 계란 스크램블. 중불에 식용유 반 숟가락을 두르고 계란 두 개를 풀어 저으며 이 분 정도 몽글몽글 덩어리가 질 때까지 익혀 주세요."),
-            Step("밥 담기", 1, "그릇에 밥 종이컵 1컵 반을 담고 스크램블을 올려 주세요.", "사 단계, 밥 담기. 그릇에 밥을 담고 스크램블을 올려 주세요."),
-            Step("참치마요 올리기", 1, "스크램블 위에 참치마요를 올리고 김가루 2숟가락을 뿌려 주세요.", "오 단계, 참치마요 올리기. 참치마요를 올리고 김가루를 뿌리면 완성이에요."),
+            Step(
+                "참치 기름 빼기",
+                1,
+                "참치캔 기름을 숟가락으로 눌러 따라 버려 주세요. 캔 뚜껑 가장자리를 조심하세요.",
+                "일 단계, 참치 기름 빼기. 참치캔 기름을 숟가락으로 눌러 따라 버려 주세요. 캔 뚜껑 가장자리는 날카로우니 조심하세요.",
+            ),
+            Step(
+                "참치마요 만들기",
+                2,
+                "참치와 마요네즈 2숟가락을 고루 섞어 주세요.",
+                "이 단계, 참치마요 만들기. 참치와 마요네즈 두 숟가락을 고루 섞어 주세요.",
+            ),
+            Step(
+                "계란 스크램블",
+                2,
+                "중불에 식용유 ½숟가락을 두르고 계란 2개를 풀어 저으며 익혀 주세요.",
+                "삼 단계, 계란 스크램블. 중불에 식용유 반 숟가락을 두르고 계란 두 개를 풀어 저으며 이 분 정도 몽글몽글 덩어리가 질 때까지 익혀 주세요.",
+            ),
+            Step(
+                "밥 담기",
+                1,
+                "그릇에 밥 종이컵 1컵 반을 담고 스크램블을 올려 주세요.",
+                "사 단계, 밥 담기. 그릇에 밥을 담고 스크램블을 올려 주세요.",
+            ),
+            Step(
+                "참치마요 올리기",
+                1,
+                "스크램블 위에 참치마요를 올리고 김가루 2숟가락을 뿌려 주세요.",
+                "오 단계, 참치마요 올리기. 참치마요를 올리고 김가루를 뿌리면 완성이에요.",
+            ),
         ),
         sources=(
             "진니찡, 만개의레시피, https://www.10000recipe.com/recipe/6879335",
@@ -236,7 +410,7 @@ RECIPES = (
     ),
 )
 
-MICROWAVE_RECIPES = (
+MICROWAVE_RECIPES: tuple[Recipe, ...] = (
     Recipe(
         folder="김치스팸볶음밥",
         title="김치스팸볶음밥",
@@ -287,7 +461,7 @@ MICROWAVE_RECIPES = (
     ),
 )
 
-THEME_PALETTES = {
+THEME_PALETTES: dict[str, dict[str, str]] = {
     "Default": {
         "background": "#F4F5F7",
         "surface": "#FFFFFF",
@@ -363,18 +537,41 @@ def select_microwave_wattage() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def read_asset(path: str) -> bytes:
-    return Path(path).read_bytes()
+def read_asset(path: str) -> bytes | None:
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return None
+    return file_path.read_bytes()
 
 
 @st.cache_data(show_spinner=False)
-def step_image_canvas(path: str) -> Image.Image:
-    with Image.open(path) as source:
-        image = source.convert("RGB")
-    canvas_width = (image.height * 3 + 1) // 2
-    canvas = Image.new("RGB", (canvas_width, image.height), "white")
-    canvas.paste(image, ((canvas_width - image.width) // 2, 0))
-    return canvas
+def step_image_canvas(path: str) -> Image.Image | None:
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return None
+    try:
+        with Image.open(file_path) as source:
+            image = source.convert("RGB")
+            canvas_width = (image.height * 3 + 1) // 2
+            canvas = Image.new("RGB", (canvas_width, image.height), "white")
+            canvas.paste(image, ((canvas_width - image.width) // 2, 0))
+            return canvas
+    except Exception:
+        return None
+
+
+def show_image_safe(image_obj: Any, caption: str | None = None, missing_text: str = "이미지를 찾을 수 없습니다.") -> None:
+    if image_obj is None:
+        st.caption(missing_text)
+        return
+    if isinstance(image_obj, (str, Path)):
+        p = Path(image_obj)
+        if not p.exists() or not p.is_file():
+            st.caption(f"{missing_text} ({p.name})")
+            return
+        st.image(str(p), caption=caption, width="stretch")
+        return
+    st.image(image_obj, caption=caption, width="stretch")
 
 
 def asset_path(recipe: Recipe, kind: str, step: int | None = None) -> Path:
@@ -390,6 +587,7 @@ def asset_path(recipe: Recipe, kind: str, step: int | None = None) -> Path:
         if kind == "image":
             return folder / f"{recipe.folder}_A_{step}단계_이미지.png"
         raise ValueError(f"No {kind} asset is available for the microwave recipe.")
+
     if kind == "finished":
         return folder / f"{recipe.folder}_0_완성이미지.png"
     if kind == "infographic":
@@ -427,10 +625,8 @@ def go_to(phase: str) -> None:
 def render_home() -> None:
     st.markdown('<div class="eyebrow">맞춤 레시피 추천</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="main-title">세이브밀</h1>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="sub-title">집에 있는 재료로 만드는 쉬운 한 끼</p>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<p class="sub-title">집에 있는 재료로 만드는 쉬운 한 끼</p>', unsafe_allow_html=True)
+
     st.subheader("주방 환경을 선택해 주세요")
     st.radio(
         "조리 환경",
@@ -445,6 +641,7 @@ def render_home() -> None:
         on_change=select_kitchen_profile,
         label_visibility="collapsed",
     )
+
     if st.session_state.kitchen_profile == "A":
         st.selectbox(
             "전자레인지 출력",
@@ -468,21 +665,19 @@ def render_home() -> None:
 
     recipes = sorted(
         recipes_for_kitchen,
-        key=lambda item: (
-            -len(set(selected_tags) & set(item.ingredient_tags)),
-            item.title,
-        ),
+        key=lambda item: (-len(set(selected_tags) & set(item.ingredient_tags)), item.title),
     )
+
     columns = st.columns(2)
     for index, recipe in enumerate(recipes):
         matching = len(set(selected_tags) & set(recipe.ingredient_tags))
         with columns[index % 2]:
-            st.image(str(asset_path(recipe, "finished")), use_column_width=True)
+            show_image_safe(asset_path(recipe, "finished"), missing_text="완성 이미지 준비 중")
             st.markdown(f"### {recipe.title}")
             st.caption(f"1인분 · 약 {recipe.total_minutes}분")
             if selected_tags:
                 st.caption(f"선택 재료 {matching}개 포함")
-            if st.button("메뉴 자세히 보기", key=f"open-{recipe.folder}", use_container_width=True):
+            if st.button("메뉴 자세히 보기", key=f"open-{recipe.folder}", width="stretch"):
                 st.session_state.recipe_folder = recipe.folder
                 st.session_state.phase = "detail"
                 st.rerun()
@@ -495,7 +690,7 @@ def render_detail(recipe: Recipe) -> None:
 
     st.markdown(f'<h1 class="main-title">{recipe.title}</h1>', unsafe_allow_html=True)
     st.caption(f"1인분 · 총 소요 시간 약 {recipe.total_minutes}분")
-    st.image(str(asset_path(recipe, "finished")), use_column_width=True)
+    show_image_safe(asset_path(recipe, "finished"), missing_text="완성 이미지 준비 중")
 
     st.subheader("오늘의 재료")
     st.markdown("\n".join(f"- {ingredient}" for ingredient in recipe.ingredients))
@@ -517,23 +712,22 @@ def render_detail(recipe: Recipe) -> None:
             )
 
     savings = calculate_savings(recipe.title)
-    st.subheader("오늘의 절감액")
-    cost_columns = st.columns(3)
-    cost_columns[0].metric("1인분 재료비", f"{savings['ingredient_cost']:,}원")
-    cost_columns[1].metric("배달 총액", f"{savings['delivery_total']:,}원")
-    cost_columns[2].metric("절감액", f"{savings['savings']:,}원")
-    st.caption(
-        f"배달 음식값 {savings['delivery_price']:,}원 + 배달비 {savings['delivery_fee']:,}원"
-    )
+    if savings is not None:
+        st.subheader("오늘의 절감액")
+        cost_columns = st.columns(3)
+        cost_columns[0].metric("1인분 재료비", f"{savings['ingredient_cost']:,}원")
+        cost_columns[1].metric("배달 총액", f"{savings['delivery_total']:,}원")
+        cost_columns[2].metric("절감액", f"{savings['savings']:,}원")
+        st.caption(f"배달 음식값 {savings['delivery_price']:,}원 + 배달비 {savings['delivery_fee']:,}원")
 
     st.subheader("요리 순서 한눈에 보기")
-    st.image(str(asset_path(recipe, "infographic")), use_column_width=True)
+    show_image_safe(asset_path(recipe, "infographic"), missing_text="인포그래픽 준비 중")
 
     with st.expander("참고 레시피 출처"):
         for source in recipe.sources:
             st.markdown(f"- {source}")
 
-    if st.button("요리 시작하기", type="primary", use_container_width=True):
+    if st.button("요리 시작하기", type="primary", width="stretch"):
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.session_state.auto_advance = False
@@ -541,15 +735,17 @@ def render_detail(recipe: Recipe) -> None:
 
 
 def advance_step(recipe: Recipe, step_index: int) -> None:
-    if step_index + 1 == len(recipe.steps):
+    if step_index + 1 >= len(recipe.steps):
         st.session_state.phase = "done"
         return
     st.session_state.step_index = step_index + 1
 
 
 def render_cooking(recipe: Recipe) -> None:
-    step_index = st.session_state.step_index
+    step_index = min(max(st.session_state.step_index, 0), len(recipe.steps) - 1)
+    st.session_state.step_index = step_index
     step = recipe.steps[step_index]
+
     st.markdown(f'<h1 class="main-title">{recipe.title}</h1>', unsafe_allow_html=True)
     st.caption(f"STEP {step_index + 1} / {len(recipe.steps)}")
 
@@ -557,10 +753,7 @@ def render_cooking(recipe: Recipe) -> None:
     for index, column in enumerate(progress_columns):
         state = "complete" if index < step_index else "current" if index == step_index else "upcoming"
         with column:
-            st.markdown(
-                f'<div class="step-marker {state}">{index + 1}</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="step-marker {state}">{index + 1}</div>', unsafe_allow_html=True)
 
     badge, setting = st.columns([1, 2])
     with badge:
@@ -574,6 +767,7 @@ def render_cooking(recipe: Recipe) -> None:
         else:
             time_label = f"예상 약 {step.minutes}분"
         st.markdown(f'<div class="time-badge">⏱ {time_label}</div>', unsafe_allow_html=True)
+
     with setting:
         st.checkbox(
             "자동 다음 단계 (예상 시간)",
@@ -582,29 +776,41 @@ def render_cooking(recipe: Recipe) -> None:
         )
 
     st.subheader(step.title)
-    st.image(
-        step_image_canvas(str(asset_path(recipe, "image", step_index + 1))),
-        use_column_width=True,
-    )
+    show_image_safe(step_image_canvas(str(asset_path(recipe, "image", step_index + 1))), missing_text="단계 이미지 준비 중")
     st.info(cooking_instruction(step))
 
     audio_base64 = ""
     if recipe.variant != "A":
         audio_bytes = read_asset(str(asset_path(recipe, "voice", step_index + 1)))
-        audio_base64 = base64.b64encode(audio_bytes).decode("ascii")
+        if audio_bytes:
+            audio_base64 = base64.b64encode(audio_bytes).decode("ascii")
+
     microwave_step = recipe.variant == "A" and step.microwave_minutes_700w is not None
     cook_minutes = selected_microwave_minutes(step) if microwave_step else step.minutes
-    event: Any = CONTROLS_COMPONENT(
-        audio_base64=audio_base64,
-        auto_advance=st.session_state.auto_advance and (not microwave_step or cook_minutes is not None),
-        cook_seconds=(cook_minutes or (1 if microwave_step else step.minutes)) * 60,
-        heating_step=microwave_step,
-        step_number=step_index + 1,
-        can_go_back=step_index > 0,
-        colors=THEME_PALETTES[st.session_state.theme],
-        key=f"controls-{recipe.folder}-{step_index + 1}",
-        default=None,
-    )
+
+    event: Any = None
+    if CONTROLS_COMPONENT is not None:
+        event = CONTROLS_COMPONENT(
+            audio_base64=audio_base64,
+            auto_advance=st.session_state.auto_advance and (not microwave_step or cook_minutes is not None),
+            cook_seconds=(cook_minutes or (1 if microwave_step else step.minutes)) * 60,
+            heating_step=microwave_step,
+            step_number=step_index + 1,
+            can_go_back=step_index > 0,
+            colors=THEME_PALETTES[st.session_state.theme],
+            key=f"controls-{recipe.folder}-{step_index + 1}",
+            default=None,
+        )
+    else:
+        col_prev, col_next = st.columns(2)
+        with col_prev:
+            if st.button("이전 단계", disabled=step_index == 0, width="stretch"):
+                st.session_state.step_index = step_index - 1
+                st.rerun()
+        with col_next:
+            if st.button("다음 단계", width="stretch"):
+                advance_step(recipe, step_index)
+                st.rerun()
 
     if isinstance(event, dict) and event.get("step_number") == step_index + 1:
         event_id = event.get("event_id")
@@ -625,12 +831,13 @@ def render_cooking(recipe: Recipe) -> None:
 def render_done(recipe: Recipe) -> None:
     st.markdown('<div class="eyebrow">오늘의 요리 완료</div>', unsafe_allow_html=True)
     st.markdown(f'<h1 class="main-title">{recipe.title} 완성!</h1>', unsafe_allow_html=True)
-    st.image(str(asset_path(recipe, "finished")), use_column_width=True)
+    show_image_safe(asset_path(recipe, "finished"), missing_text="완성 이미지 준비 중")
     st.success("수고하셨어요. 맛있게 드세요!")
-    if st.button("다른 메뉴 고르기", type="primary", use_container_width=True):
+
+    if st.button("다른 메뉴 고르기", type="primary", width="stretch"):
         st.session_state.phase = "home"
         st.rerun()
-    if st.button("이 메뉴 다시 요리하기", use_container_width=True):
+    if st.button("이 메뉴 다시 요리하기", width="stretch"):
         st.session_state.step_index = 0
         st.session_state.phase = "cook"
         st.rerun()
@@ -643,6 +850,7 @@ def main() -> None:
         layout="centered",
         initial_sidebar_state="collapsed",
     )
+
     st.session_state.setdefault("phase", "home")
     st.session_state.setdefault("recipe_folder", RECIPES[0].folder)
     st.session_state.setdefault("step_index", 0)
@@ -652,13 +860,12 @@ def main() -> None:
     st.session_state.setdefault("kitchen_profile_selector", st.session_state.kitchen_profile)
     st.session_state.setdefault("microwave_wattage_selector", st.session_state.microwave_wattage)
     st.session_state.setdefault("theme", "Default")
+
     if st.session_state.theme not in THEME_PALETTES:
         st.session_state.theme = "Default"
+
     for theme_name in THEME_PALETTES:
-        st.session_state.setdefault(
-            theme_checkbox_key(theme_name),
-            theme_name == st.session_state.theme,
-        )
+        st.session_state.setdefault(theme_checkbox_key(theme_name), theme_name == st.session_state.theme)
 
     _, theme_column = st.columns([12, 1])
     with theme_column:
@@ -681,8 +888,7 @@ def main() -> None:
     .stApp [data-testid="stMarkdownContainer"],
     .stApp [data-testid="stMarkdownContainer"] p,
     .stApp [data-testid="stMarkdownContainer"] li,
-    .stApp label,
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{
+    .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{
         color: {palette["text"]} !important;
     }}
     .stApp [data-testid="stCaptionContainer"] p {{ color: {palette["muted"]} !important; }}
@@ -706,9 +912,7 @@ def main() -> None:
         border: 1px solid {palette["border"]};
         padding: .35rem !important;
     }}
-    [data-testid="stPopoverBody"] > div {{
-        background: {palette["surface"]} !important;
-    }}
+    [data-testid="stPopoverBody"] > div {{ background: {palette["surface"]} !important; }}
     [data-testid="stPopoverBody"] * {{ color: {palette["text"]} !important; }}
     [data-baseweb="select"] > div {{
         background: {palette["surface"]} !important;
@@ -737,6 +941,7 @@ def main() -> None:
         border: 1px solid {palette["border"]};
     }}
     """
+
     st.markdown(
         f"""
         <style>
@@ -748,14 +953,8 @@ def main() -> None:
         .main-title {{ font-size: 2rem; font-weight: 800; margin: 0; }}
         .sub-title {{ margin: .25rem 0 1.2rem; }}
         .eyebrow {{ font-size: .85rem; font-weight: 700; }}
-        .time-badge {{
-            display: inline-block; border-radius: 999px;
-            padding: .45rem .8rem; font-weight: 700;
-        }}
-        .step-marker {{
-            text-align: center; padding: .5rem; border-radius: 999px;
-            font-weight: 700;
-        }}
+        .time-badge {{ display: inline-block; border-radius: 999px; padding: .45rem .8rem; font-weight: 700; }}
+        .step-marker {{ text-align: center; padding: .5rem; border-radius: 999px; font-weight: 700; }}
         div.stButton > button {{ border-radius: 12px; min-height: 2.5rem; font-weight: 700; }}
         div[data-testid="stImage"] img {{ border-radius: 16px; }}
         {theme_css}
@@ -769,6 +968,7 @@ def main() -> None:
         (item for item in available_recipes if item.folder == st.session_state.recipe_folder),
         available_recipes[0],
     )
+
     phase = st.session_state.phase
     if phase == "home":
         render_home()
