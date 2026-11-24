@@ -851,49 +851,25 @@ def render_cooking(recipe: Recipe) -> None:
     )
     st.info(cooking_instruction(step))
 
-    audio_base64 = ""
     if recipe.variant != "A":
-        audio_bytes = read_asset(str(asset_path(recipe, "voice", step_index + 1)))
+        audio_path = asset_path(recipe, "voice", step_index + 1)
+        audio_bytes = read_asset(str(audio_path))
         if audio_bytes:
-            audio_base64 = base64.b64encode(audio_bytes).decode("ascii")
+            mime_type = "audio/wav" if audio_path.suffix.lower() == ".wav" else "audio/mp4" if audio_path.suffix.lower() == ".m4a" else "audio/mp3"
+            st.audio(audio_bytes, format=mime_type)
+        else:
+            st.caption(f"음성 안내 파일이 없습니다. ({audio_path.name})")
 
-    microwave_step = recipe.variant == "A" and step.microwave_minutes_700w is not None
-    cook_minutes = selected_microwave_minutes(step) if microwave_step else step.minutes
-
-    event: Any = None
-    if CONTROLS_COMPONENT is not None:
-        event = CONTROLS_COMPONENT(
-            audio_base64=audio_base64,
-            auto_advance=st.session_state.auto_advance and (not microwave_step or cook_minutes is not None),
-            cook_seconds=(cook_minutes or (1 if microwave_step else step.minutes)) * 60,
-            heating_step=microwave_step,
-            step_number=step_index + 1,
-            can_go_back=step_index > 0,
-            colors=THEME_PALETTES[st.session_state.theme],
-            key=f"controls-{recipe.folder}-{step_index + 1}",
-            default=None,
-        )
-    else:
-        col_prev, col_next = st.columns(2)
-        with col_prev:
-            if st.button("이전 단계", disabled=step_index == 0, width="stretch"):
-                st.session_state.step_index = step_index - 1
-                st.rerun()
-        with col_next:
-            if st.button("다음 단계", width="stretch"):
-                advance_step(recipe, step_index)
-                st.rerun()
-
-    if isinstance(event, dict) and event.get("step_number") == step_index + 1:
-        event_id = event.get("event_id")
-        if event_id and event_id != st.session_state.get("last_control_event_id"):
-            st.session_state.last_control_event_id = event_id
-            if event.get("action") == "previous" and step_index > 0:
-                st.session_state.step_index = step_index - 1
-                st.rerun()
-            if event.get("action") == "next":
-                advance_step(recipe, step_index)
-                st.rerun()
+    col_prev, col_next = st.columns(2)
+    with col_prev:
+        if st.button("이전 단계", key=f"prev-{recipe.folder}-{step_index}", disabled=step_index == 0, width="stretch"):
+            st.session_state.step_index = step_index - 1
+            st.rerun()
+    with col_next:
+        next_label = "요리 완료" if step_index + 1 >= len(recipe.steps) else "다음 단계"
+        if st.button(next_label, key=f"next-{recipe.folder}-{step_index}", type="primary", width="stretch"):
+            advance_step(recipe, step_index)
+            st.rerun()
 
     if st.button("요리 안내 종료", key="exit-cook"):
         st.session_state.phase = "detail"
